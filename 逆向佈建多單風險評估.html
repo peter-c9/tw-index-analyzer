@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>微台指逆向佈建分析 - ETF 資金對比版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; background: #121212; color: #e0e0e0; padding: 20px; }
+        .container { max-width: 1550px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { color: #5dade2; margin-top: 0; border-bottom: 2px solid #34495e; padding-bottom: 10px; }
+        .config-panel { display: flex; gap: 15px; flex-wrap: wrap; background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; align-items: flex-end; }
+        .input-item { display: flex; flex-direction: column; gap: 5px; }
+        input, button { padding: 10px; border-radius: 6px; border: 1px solid #333; background: #333; color: white; font-size: 14px; }
+        
+        .sim-input { border-color: #f1c40f; background: rgba(241, 196, 15, 0.1); }
+        
+        button { background: #3498db; cursor: pointer; border: none; font-weight: bold; min-width: 120px; transition: 0.2s; }
+        button:hover { background: #2980b9; }
+        .btn-calc { background: #27ae60; }
+        .btn-calc:hover { background: #2ecc71; }
+        
+        .table-wrapper { overflow-x: auto; max-height: 750px; overflow-y: auto; border: 1px solid #444; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        
+        th { position: sticky; top: 0; background: #2c3e50; color: #5dade2; z-index: 10; padding: 12px; border: 1px solid #444; transition: background 0.2s; white-space: nowrap; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background: #34495e; color: #fff; }
+        .sort-icon { font-size: 0.8em; color: #aaa; margin-left: 4px; }
+
+        td { padding: 10px; border: 1px solid #333; text-align: right; }
+        tr:hover { background: #2a2a2a; }
+        
+        .neg { color: #ff6b6b; font-weight: bold; }
+        .pos { color: #51cf66; font-weight: bold; }
+        .highlight-bounce { color: #9b59b6; font-weight: bold; }
+        .sticky-col { position: sticky; left: 0; background: #1e1e1e; z-index: 5; text-align: center; border-right: 2px solid #333; }
+        
+        .strategy-label { font-size: 11px; color: #aaa; text-align: center; }
+        .str-flat { color: #bdc3c7; }
+        .str-inc { color: #e74c3c; font-weight: bold; }
+        .str-step { color: #f39c12; font-weight: bold; }
+        .str-step3 { color: #3498db; font-weight: bold; }
+
+        .row-bg-0 td { background: rgba(255, 255, 255, 0); }
+        .row-bg-1 td { background: rgba(52, 152, 219, 0.05); }
+        .row-bg-2 td { background: rgba(46, 204, 113, 0.05); }
+        .row-bg-3 td { background: rgba(155, 89, 182, 0.05); border-bottom: 2px solid #444; }
+
+        .sim-row td { background: rgba(241, 196, 15, 0.15) !important; border-top: 2px solid #f1c40f; }
+        .sim-row-1 td { background: rgba(241, 196, 15, 0.15) !important; }
+        .sim-row-2 td { background: rgba(241, 196, 15, 0.15) !important; border-bottom: 2px solid #f1c40f; }
+        .sim-row .sticky-col, .sim-row-1 .sticky-col, .sim-row-2 .sticky-col { background: #2c2710 !important; color: #f1c40f; font-weight: bold; }
+
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #1e1e1e; padding: 25px; border-radius: 10px; width: 95%; max-width: 1300px; max-height: 85vh; overflow-y: auto; border: 1px solid #555; box-shadow: 0 5px 30px rgba(0,0,0,0.8); position: relative; }
+        .modal-close { position: absolute; top: 15px; right: 20px; background: #ff6b6b; padding: 6px 15px; border-radius: 5px; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .modal-close:hover { background: #e74c3c; }
+        .modal-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .modal-table th, .modal-table td { border: 1px solid #444; padding: 10px; text-align: right; }
+        .modal-table th { background: #34495e; color: #fff; text-align: center; position: sticky; top: 0; font-size: 13px; }
+        .modal-table td { font-size: 13px; }
+        
+        .btn-detail { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
+        .btn-detail:hover { background: #2ecc71; transform: scale(1.05); }
+        .btn-disabled { background: #555; color: #888; cursor: not-allowed; }
+        
+        .cash-box { display: inline-block; padding: 8px 12px; border-radius: 5px; margin-right: 10px; font-size: 14px; margin-top: 5px; }
+        .cash-futures { background: rgba(243, 156, 18, 0.15); border: 1px solid #f39c12; }
+        .cash-etf1 { background: rgba(52, 152, 219, 0.15); border: 1px solid #3498db; }
+        .cash-etf2 { background: rgba(155, 89, 182, 0.15); border: 1px solid #9b59b6; }
+    </style>
+</head>
+<body onload="handleCalculate()">
+
+<div class="container">
+    <h2>微台指逆向佈建 - ETF 資金對比版 (支援內建與外部上傳)</h2>
+    
+    <div class="config-panel">
+        <div class="input-item">
+            <label>1. 外部檔案 (選填，不傳就用內建)</label>
+            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+        </div>
+        <div class="input-item">
+            <label>固定進場比例(%)</label>
+            <input type="number" id="stepPct" value="3" step="0.1" style="width: 100px;">
+        </div>
+        <div class="input-item">
+            <label>預估保證金比率(%)</label>
+            <input type="number" id="marginRatio" value="8" style="width: 120px;">
+        </div>
+        
+        <div style="width: 2px; background: #444; margin: 0 10px; height: 50px;"></div>
+        
+        <div class="input-item">
+            <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬最高點</label>
+            <input type="number" id="simPeak" class="sim-input" placeholder="例: 26000" style="width: 100px;">
+        </div>
+        <div class="input-item">
+            <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬回檔(%)</label>
+            <input type="number" id="simDropPct" class="sim-input" placeholder="例: 35" style="width: 100px;">
+        </div>
+
+        <button class="btn-calc" onclick="handleCalculate()">重新計算 / 更新數據</button>
+    </div>
+
+    <div id="status" style="margin-bottom:10px; color: #aaa; font-size: 14px;">不選檔案可直接點擊「計算」套用內建的25年波段回檔精華；或上傳自己的資料檔。</div>
+
+    <div class="table-wrapper">
+        <table id="resultTable">
+            <thead>
+                <tr>
+                    <th class="sticky-col sortable" onclick="sortData('rank')">原排名 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('date')">起點日期 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('peak')">最高價 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('trough')">最低價 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('dropPct')">最大跌幅 <span class="sort-icon"></span></th>
+                    <th>加碼口數方式</th>
+                    <th>預估保證金</th>
+                    <th class="sortable" onclick="sortData('count')">最終口數 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('loss')">最大浮虧 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('bounce')" title="從最低點需要往上漲幾%才能讓帳戶損益兩平">打平需反彈(%) <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('safety')">總安全準備金 <span class="sort-icon"></span></th>
+                    <th class="sortable" onclick="sortData('profit')" title="大盤漲回原先最高點(起跌點)時的總獲利">回升高點獲利 <span class="sort-icon"></span></th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="detailsModal" class="modal-overlay">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">關閉 ✖</button>
+        <h3 id="modalTitle" style="color: #5dade2; margin-top: 0;">詳細計算過程與資金對比</h3>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+// 內建過去 25 年台指期跌幅最大的 30 次波段回檔
+const top30Drawdowns = [
+  { date: "2007/10/22", peak: 9675.0, trough: 3811.0, dropPct: 0.606098 },
+  { date: "2002/04/15", peak: 6398.0, trough: 3780.0, dropPct: 0.409190 },
+  { date: "2001/04/16", peak: 5588.0, trough: 3351.0, dropPct: 0.400322 },
+  { date: "2020/01/20", peak: 12111.0, trough: 8268.0, dropPct: 0.317314 },
+  { date: "2022/01/10", peak: 18360.0, trough: 12651.0, dropPct: 0.310947 },
+  { date: "2015/04/20", peak: 9920.0, trough: 7000.0, dropPct: 0.294354 },
+  { date: "2024/07/08", peak: 23814.0, trough: 17015.0, dropPct: 0.285504 },
+  { date: "2004/03/01", peak: 7075.0, trough: 5210.0, dropPct: 0.263604 },
+  { date: "2007/07/16", peak: 9545.0, trough: 7808.0, dropPct: 0.181980 },
+  { date: "2006/05/02", peak: 7421.0, trough: 6148.0, dropPct: 0.171540 },
+  { date: "2018/01/22", peak: 11144.0, trough: 9306.0, dropPct: 0.164931 },
+  { date: "2021/04/26", peak: 17569.0, trough: 15030.0, dropPct: 0.144515 },
+  { date: "2026/02/23", peak: 35611.0, trough: 31126.0, dropPct: 0.125944 }, 
+  { date: "2021/07/12", peak: 17924.0, trough: 16049.0, dropPct: 0.104608 },
+  { date: "2002/02/04", peak: 5969.0, trough: 5480.0, dropPct: 0.081923 },
+  { date: "2007/02/05", peak: 7884.0, trough: 7268.0, dropPct: 0.078132 },
+  { date: "2025/10/27", peak: 28430.0, trough: 26246.0, dropPct: 0.076820 },
+  { date: "2024/04/08", peak: 20753.0, trough: 19269.0, dropPct: 0.071507 },
+  { date: "2020/09/14", peak: 12833.0, trough: 12050.0, dropPct: 0.061014 },
+  { date: "2021/01/18", peak: 15977.0, trough: 15035.0, dropPct: 0.058959 },
+  { date: "2002/01/07", peak: 5640.0, trough: 5321.0, dropPct: 0.056560 },
+  { date: "2020/08/10", peak: 12789.0, trough: 12066.0, dropPct: 0.056532 },
+  { date: "2017/11/20", peak: 10854.0, trough: 10321.0, dropPct: 0.049106 },
+  { date: "2021/02/17", peak: 16309.0, trough: 15569.0, dropPct: 0.045373 },
+  { date: "2002/01/21", peak: 5954.0, trough: 5722.0, dropPct: 0.038965 },
+  { date: "2020/10/05", peak: 12873.0, trough: 12407.0, dropPct: 0.036199 },
+  { date: "2006/12/25", peak: 7880.0, trough: 7596.0, dropPct: 0.036040 },
+  { date: "2025/10/07", peak: 27338.0, trough: 26380.0, dropPct: 0.035042 },
+  { date: "2024/06/17", peak: 23207.0, trough: 22409.0, dropPct: 0.034386 },
+  { date: "2006/12/04", peak: 7633.0, trough: 7376.0, dropPct: 0.033669 }
+];
+
+let globalData = [];
+let currentSortCol = 'dropPct'; 
+let isAscending = false; 
+
+function formatDate(val) {
+    if (!val) return "無日期";
+    if (val instanceof Date) return val.toISOString().split('T')[0];
+    if (typeof val === 'number' && val > 30000) return new Date((val - 25569) * 86400 * 1000).toISOString().split('T')[0];
+    return val.toString().replace(/\//g, '-').split(' ')[0];
+}
+
+function handleCalculate() {
+    const file = document.getElementById('fileInput').files[0];
+    document.getElementById('status').innerText = "系統正在計算並套用策略，請稍候...";
+    
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+            extractAndRunAnalysis(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+        };
+        reader.readAsArrayBuffer(file);
+    } else {
+        runAnalysisWithList(top30Drawdowns);
+        document.getElementById('status').innerText = `已成功套用內建的25年精華波段資料。`;
+    }
+}
+
+function extractAndRunAnalysis(data) {
+    const firstRow = data[0];
+    const closeKey = Object.keys(firstRow).find(k => k.match(/收盤|Close/i));
+    const lowKey = Object.keys(firstRow).find(k => k.match(/最低|Low/i));
+    const dateKey = Object.keys(firstRow).find(k => k.match(/時間|日期|Date/i));
+
+    if (!closeKey || !lowKey) { alert("找不到必要的數據欄位 (收盤價、最低價)！"); return; }
+
+    let peak = -Infinity, allDDs = [], currentDD = null;
+    
+    data.forEach(row => {
+        const c = parseFloat(row[closeKey]), l = parseFloat(row[lowKey]);
+        if (isNaN(c)) return;
+
+        if (c > peak) {
+            if (currentDD) allDDs.push(currentDD);
+            peak = c;
+            currentDD = { peak, trough: l, date: formatDate(row[dateKey]) };
+        } else if (currentDD) {
+            if (l < currentDD.trough) currentDD.trough = l;
+        }
+    });
+    if (currentDD) allDDs.push(currentDD);
+
+    allDDs.forEach(dd => dd.dropPct = (dd.peak - dd.trough) / dd.peak);
+    allDDs.sort((a, b) => b.dropPct - a.dropPct);
+    
+    runAnalysisWithList(allDDs.slice(0, 30));
+    document.getElementById('status').innerText = `已從外部檔案中萃取跌幅最大的 ${globalData.length- (document.getElementById('simPeak').value>0?1:0)} 筆資料並完成計算！`;
+}
+
+function runAnalysisWithList(ddList) {
+    const stepPct = parseFloat(document.getElementById('stepPct').value) / 100;
+    const marginRatio = parseFloat(document.getElementById('marginRatio').value) / 100;
+    const ptVal = 10; 
+
+    globalData = ddList.map((dd, i) => {
+        const margin = Math.ceil((dd.peak * ptVal * marginRatio) / 1000) * 1000;
+        const simulatedPrices = [dd.peak, dd.trough];
+        return {
+            isSim: false, rank: i + 1, date: dd.date, peak: dd.peak, trough: dd.trough,
+            dropPct: dd.dropPct, estMargin: margin,
+            resFlat: simulate(dd.peak, simulatedPrices, stepPct, 'flat', ptVal, margin),
+            resInc: simulate(dd.peak, simulatedPrices, stepPct, 'incremental', ptVal, margin),
+            resStep: simulate(dd.peak, simulatedPrices, stepPct, 'stepped', ptVal, margin),
+            resStep3: simulate(dd.peak, simulatedPrices, stepPct, 'stepped3', ptVal, margin)
+        };
+    });
+
+    const simPeakVal = parseFloat(document.getElementById('simPeak').value);
+    const simDropPctVal = parseFloat(document.getElementById('simDropPct').value) / 100;
+    if (simPeakVal > 0 && simDropPctVal > 0) {
+        const simTrough = simPeakVal * (1 - simDropPctVal);
+        const margin = Math.ceil((simPeakVal * ptVal * marginRatio) / 1000) * 1000;
+        const prices = [simPeakVal, simTrough]; 
+        globalData.push({
+            isSim: true, rank: '⭐', date: '【自訂模擬情境】', peak: simPeakVal, trough: simTrough,
+            dropPct: simDropPctVal, estMargin: margin,
+            resFlat: simulate(simPeakVal, prices, stepPct, 'flat', ptVal, margin),
+            resInc: simulate(simPeakVal, prices, stepPct, 'incremental', ptVal, margin),
+            resStep: simulate(simPeakVal, prices, stepPct, 'stepped', ptVal, margin),
+            resStep3: simulate(simPeakVal, prices, stepPct, 'stepped3', ptVal, margin)
+        });
+    }
+
+    sortData('dropPct', false);
+}
+
+function simulate(peak, prices, stepPct, mode, ptVal, marginPerContract) {
+    let trades = [], currentLevel = 0, minPrice = peak, totalQty = 0, totalCost = 0;
+
+    prices.forEach(p => {
+        if (p < minPrice) minPrice = p;
+        let target = peak * (1 - (currentLevel + 1) * stepPct);
+        
+        while (p <= target) {
+            currentLevel++; 
+            let qty = mode === 'incremental' ? currentLevel : mode === 'stepped' ? Math.ceil(currentLevel / 2) : mode === 'stepped3' ? Math.ceil(currentLevel / 3) : 1;
+            
+            // 計算當次 ETF 現貨投入金額 (為了匹配等效期貨曝險)
+            let this0050 = target * qty * ptVal; 
+            let this00631L = this0050 / 2;
+
+            let prevTotalQty = totalQty;
+            let prevAvgCost = totalQty > 0 ? (totalCost / totalQty) : 0;
+
+            totalQty += qty;
+            totalCost += (target * qty);
+            
+            // 由於每次觸發加碼，代表舊部位經歷了下跌，我們在此刻計算【剛觸發這筆交易時的總浮虧】
+            // (新加碼的部位剛買進，損益為0，所以虧損完全來自於舊部位)
+            let currentLoss = prevTotalQty > 0 ? (target - prevAvgCost) * prevTotalQty * ptVal : 0;
+
+            trades.push({ 
+                level: currentLevel, 
+                price: target, 
+                qty, 
+                totalQty, 
+                avgCost: totalCost / totalQty, 
+                margin: totalQty * marginPerContract,
+                this0050: this0050,
+                this00631L: this00631L,
+                cum0050: totalCost * ptVal,
+                cum00631L: totalCost * ptVal / 2,
+                currentLoss: currentLoss
+            });
+            
+            target = peak * (1 - (currentLevel + 1) * stepPct);
+        }
+    });
+
+    if (totalQty === 0) return { count: 0, loss: 0, safety: 0, bouncePct: 0, profitAtPeak: 0, etf0050: 0, etf00631L: 0, trades: [] };
+
+    const avgCost = totalCost / totalQty;
+    const loss = Math.round((minPrice - avgCost) * totalQty * ptVal);
+    const safety = Math.abs(loss) + (totalQty * marginPerContract);
+    const bouncePct = ((avgCost - minPrice) / minPrice) * 100; 
+    
+    const profitAtPeak = Math.round((peak - avgCost) * totalQty * ptVal);
+    
+    const totalExposure = totalCost * ptVal; 
+    const etf0050 = totalExposure; 
+    const etf00631L = totalExposure / 2; 
+
+    return { count: totalQty, avgCost, loss, safety, bouncePct, profitAtPeak, etf0050, etf00631L, trades };
+}
+
+function showDetails(index, mode) {
+    const item = globalData[index];
+    const data = mode === 'flat' ? item.resFlat : mode === 'incremental' ? item.resInc : mode === 'stepped' ? item.resStep : item.resStep3;
+    const sName = mode === 'flat' ? '等量 (1, 1, 1...)' : mode === 'incremental' ? '遞增 (1, 2, 3...)' : mode === 'stepped' ? '雙階梯 (1, 1, 2, 2, 3...)' : '三階梯 (1, 1, 1, 2, 2, 2...)';
+    const step = parseFloat(document.getElementById('stepPct').value);
+    
+    document.getElementById('modalTitle').innerText = `詳細交易歷程：${item.date}`;
+    let html = `<div style="margin-bottom:15px; padding:12px; background:#2c3e50; border-radius:6px; font-size:15px;">
+        <strong>最高點：</strong> ${Math.round(item.peak).toLocaleString()} &nbsp;|&nbsp; 
+        <strong>最低點：</strong> ${Math.round(item.trough).toLocaleString()} &nbsp;|&nbsp; 
+        <strong>最大跌幅：</strong> -${(item.dropPct * 100).toFixed(2)}%<br>
+        <span style="color:#f1c40f;"><strong>檢視策略：</strong> ${sName}</span>
+    </div>`;
+
+    if (data.trades.length === 0) {
+        html += `<div style="padding: 20px; text-align: center; color: #aaa;">未觸發進場。</div>`;
+    } else {
+        html += `<table class="modal-table"><thead><tr>
+                    <th>階段</th>
+                    <th>成交價</th>
+                    <th>新增口數</th>
+                    <th>總成本<br>(期貨均價)</th>
+                    <th>期貨<br>累積保證金</th>
+                    <th style="color:#5dade2;">0050<br>當次投入本金(累計)</th>
+                    <th style="color:#9b59b6;">正2 (00631L)<br>當次投入本金(累計)</th>
+                    <th title="三種商品因為總曝險金額相同，所以絕對浮虧數字是一樣的！">觸發當下<br>總浮動虧損</th>
+                 </tr></thead><tbody>`;
+                 
+        data.trades.forEach(t => {
+            const loss = Math.round(t.currentLoss);
+            html += `<tr>
+                        <td style="text-align:center;">第 ${t.level} 次<br><span style="color:#aaa;">(-${(step * t.level).toFixed(1)}%)</span></td>
+                        <td style="color:#f1c40f; font-weight:bold;">${Math.round(t.price).toLocaleString()}</td>
+                        <td><span style="color:#e67e22; font-weight:bold;">+${t.qty} 口</span><br><span style="color:#aaa;font-size:11px;">(共 ${t.totalQty} 口)</span></td>
+                        <td>${Math.round(t.avgCost).toLocaleString()}</td>
+                        <td>$${t.margin.toLocaleString()}</td>
+                        <td><span style="color:#5dade2;">+$${Math.round(t.this0050).toLocaleString()}</span><br><span style="color:#aaa;font-size:11px;">(累: $${Math.round(t.cum0050).toLocaleString()})</span></td>
+                        <td><span style="color:#9b59b6;">+$${Math.round(t.this00631L).toLocaleString()}</span><br><span style="color:#aaa;font-size:11px;">(累: $${Math.round(t.cum00631L).toLocaleString()})</span></td>
+                        <td class="${loss < 0 ? 'neg' : ''}">${loss < 0 ? '-$'+Math.abs(loss).toLocaleString() : '$0'}</td>
+                     </tr>`;
+        });
+        
+        const bottomLoss = Math.round((item.trough - data.avgCost) * data.count * 10);
+        html += `</tbody></table>
+        
+        <div style="margin-top:15px; padding:15px; background:rgba(231,76,60,0.15); border-left:5px solid #e74c3c; border-radius:4px;">
+            <h4 style="margin:0 0 10px 0; color:#ff6b6b;">⚠️ 壓力測試與獲利預估</h4>
+            殺到最低點時的浮動虧損： <span class="neg">-$${Math.abs(bottomLoss).toLocaleString()}</span><br>
+            <span style="font-size:13px;color:#aaa;">(註：期貨、0050、正2 因曝險規模完全掛鉤，下跌時產生的「絕對台幣浮虧」基本上是相同的。)</span><br><br>
+            <strong>🟢 打平所需反彈：從最低點往上漲 <span class="highlight-bounce">${data.bouncePct.toFixed(2)}%</span> 即可損益兩平 (回本價: ${Math.round(data.avgCost).toLocaleString()})</strong><br>
+            <strong>🚀 回升至起跌點 (${Math.round(item.peak).toLocaleString()}) 總獲利： <span class="pos">+$${data.profitAtPeak.toLocaleString()}</span></strong>
+        </div>
+
+        <div style="margin-top:15px; padding:15px; background:#1e272e; border-radius:4px; border: 1px solid #444;">
+            <h4 style="margin:0 0 10px 0; color:#5dade2;">💡 要達到上述相同部位與獲利，不同工具的極限資金比較：</h4>
+            <div class="cash-box cash-futures"><strong>期貨安全金： $${data.safety.toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(最大浮虧 + 每口$${item.estMargin.toLocaleString()}保證金)</span></div>
+            <div class="cash-box cash-etf1"><strong>0050 (1倍) 總現金： $${Math.round(data.etf0050).toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(全程不開槓桿，完全買入現貨)</span></div>
+            <div class="cash-box cash-etf2"><strong>00631L (正2) 總現金： $${Math.round(data.etf00631L).toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(利用兩倍槓桿減少 50% 的現金投入)</span></div>
+        </div>
+        `;
+    }
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('detailsModal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('detailsModal').style.display = 'none'; }
+window.onclick = e => { if (e.target === document.getElementById('detailsModal')) closeModal(); }
+
+function sortData(col, forceAsc = null) {
+    if (forceAsc !== null) { isAscending = forceAsc; currentSortCol = col; }
+    else { isAscending = currentSortCol === col ? !isAscending : true; currentSortCol = col; }
+
+    globalData.sort((a, b) => {
+        let vA = 0, vB = 0;
+        if(col === 'rank') { vA = a.isSim ? -1 : a.rank; vB = b.isSim ? -1 : b.rank; }
+        else if(col === 'date') { vA = new Date(a.date).getTime()||0; vB = new Date(b.date).getTime()||0; }
+        else if(col === 'peak') { vA = a.peak; vB = b.peak; }
+        else if(col === 'trough') { vA = a.trough; vB = b.trough; }
+        else if(col === 'dropPct') { vA = a.dropPct; vB = b.dropPct; }
+        else if(col === 'count') { vA = a.resFlat.count; vB = b.resFlat.count; }
+        else if(col === 'loss') { vA = Math.abs(a.resFlat.loss); vB = Math.abs(b.resFlat.loss); }
+        else if(col === 'bounce') { vA = a.resFlat.bouncePct; vB = b.resFlat.bouncePct; }
+        else if(col === 'safety') { vA = a.resFlat.safety; vB = b.resFlat.safety; }
+        else if(col === 'profit') { vA = a.resFlat.profitAtPeak; vB = b.resFlat.profitAtPeak; }
+
+        return vA < vB ? (isAscending ? -1 : 1) : vA > vB ? (isAscending ? 1 : -1) : 0;
+    });
+    renderTable();
+    updateSortIcons();
+}
+
+function updateSortIcons() {
+    document.querySelectorAll('th.sortable').forEach(th => th.querySelector('.sort-icon').innerText = '↕');
+    document.querySelectorAll('th.sortable').forEach(th => {
+        if(th.getAttribute('onclick').includes(currentSortCol)) {
+            th.querySelector('.sort-icon').innerText = isAscending ? '▲' : '▼';
+            th.querySelector('.sort-icon').style.color = '#f1c40f';
+        }
+    });
+}
+
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = "";
+    const step = parseFloat(document.getElementById('stepPct').value);
+
+    globalData.forEach((item, i) => {
+        const dropStr = (item.dropPct * 100).toFixed(2);
+        
+        [{ name: `固定 ${step}% (等量)`, data: item.resFlat, css: "str-flat", mode: 'flat' },
+         { name: `固定 ${step}% (雙階)`, data: item.resStep, css: "str-step", mode: 'stepped' },
+         { name: `固定 ${step}% (三階)`, data: item.resStep3, css: "str-step3", mode: 'stepped3' },
+         { name: `固定 ${step}% (遞增)`, data: item.resInc, css: "str-inc", mode: 'incremental' }
+        ].forEach((s, sIdx) => {
+            const tr = document.createElement('tr');
+            if (item.isSim) {
+                if (sIdx === 0) tr.className = "sim-row";
+                else if (sIdx === 3) tr.className = "sim-row-2";
+                else tr.className = "sim-row-1";
+            }
+            else tr.className = `row-bg-${sIdx}`;
+
+            if (sIdx === 0) {
+                tr.innerHTML = `
+                    <td rowspan="4" class="sticky-col">${item.isSim ? "⭐ 模擬" : 'No.'+item.rank}</td>
+                    <td rowspan="4" style="text-align:center">${item.date}</td>
+                    <td rowspan="4">${Math.round(item.peak).toLocaleString()}</td>
+                    <td rowspan="4">${Math.round(item.trough).toLocaleString()}</td>
+                    <td rowspan="4" class="neg">-${dropStr}%</td>
+                `;
+            }
+            
+            const btn = s.data.count > 0 
+                ? `<button class="btn-detail" onclick="showDetails(${i}, '${s.mode}')">🔍 明細與資金</button>` 
+                : `<button class="btn-detail btn-disabled" disabled>未觸發</button>`;
+
+            tr.innerHTML += `
+                <td class="strategy-label ${s.css}">${s.name}</td>
+                <td style="color:#888">$${item.estMargin.toLocaleString()}</td>
+                <td>${s.data.count} 口</td>
+                <td class="neg">-$${Math.abs(s.data.loss).toLocaleString()}</td>
+                <td class="highlight-bounce">${s.data.count > 0 ? s.data.bouncePct.toFixed(2) + '%' : '-'}</td>
+                <td style="color:#f39c12; font-weight:bold">$${s.data.safety.toLocaleString()}</td>
+                <td class="pos" style="font-weight:bold;">+$${s.data.count > 0 ? s.data.profitAtPeak.toLocaleString() : '0'}</td>
+                <td style="text-align:center;">${btn}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    });
+}
+</script>
+</body>
+</html>
