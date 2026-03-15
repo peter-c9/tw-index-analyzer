@@ -60,8 +60,8 @@
 
         /* 動態表專用樣式 */
         .danger-row { background-color: rgba(231, 76, 60, 0.2) !important; color: #ff7675; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .card { background: #252525; padding: 15px; border-radius: 8px; border-left: 5px solid #5dade2; text-align: center; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: #252525; padding: 15px; border-radius: 8px; border-left: 5px solid #5dade2; text-align: center; display: flex; flex-direction: column; justify-content: center; }
         .card h4 { margin: 0 0 10px 0; color: #aaa; font-size: 13px; }
         .card .val { font-size: 22px; font-weight: bold; color: #fff; }
         .chart-container { background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; height: 500px; resize: vertical; overflow: hidden; border: 1px solid #444; }
@@ -194,6 +194,15 @@
                 <h4>期末帳戶權益 (總資產淨值)</h4>
                 <div class="val pos" id="cardEquity">$0</div>
             </div>
+            <div class="card" style="border-color: #9b59b6;">
+                <h4 title="成功觸發自動停利出場的次數">成功停利趟數</h4>
+                <div class="val" id="cardTrades">0 趟</div>
+            </div>
+            <div class="card" style="border-color: #f1c40f;">
+                <h4 title="回測結束時手上的總口數，以及過程中曾達到的最大口數">期末持有總口數</h4>
+                <div class="val" id="cardContracts" style="color:#fff;">0 口</div>
+                <div style="font-size:12px; color:#aaa; margin-top:5px;" id="cardMaxContracts">過程最大: 0 口</div>
+            </div>
         </div>
 
         <div class="chart-container"><canvas id="btChart"></canvas></div>
@@ -319,13 +328,12 @@ function parseFile(event) {
         globalRawData.sort((a, b) => new Date(a.date) - new Date(b.date));
         document.getElementById('fileStatus').innerText = `✅ 成功載入 ${globalRawData.length} 筆歷史資料！`;
         
-        // 如果是在 Tab 1，自動執行計算
         if(document.getElementById('tab1').classList.contains('active')) handleCalculate();
     };
     reader.readAsArrayBuffer(file);
 }
 
-// ================= Tab 1: 靜態分析與 ETF 對比 (完整保留原邏輯) =================
+// ================= Tab 1: 靜態分析與 ETF 對比 =================
 function handleCalculate() {
     document.getElementById('status').innerText = "系統正在計算並套用策略，請稍候...";
     if (globalRawData.length > 0) {
@@ -575,7 +583,7 @@ function renderTable() {
     });
 }
 
-// ================= Tab 2: 動態連續生存回測 (最新資金精算版) =================
+// ================= Tab 2: 動態連續生存回測 =================
 function runContinuousBacktest() {
     if (globalRawData.length === 0) { alert("⚠️ 請先上傳歷史 K 線資料！"); return; }
 
@@ -597,6 +605,9 @@ function runContinuousBacktest() {
 
     let peak = simData[0].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
     let minFreeMargin = initCapital, maxDeficit = 0, log = [];
+    
+    // 新增：統計成功趟數與最大口數
+    let totalTrades = 0, maxContracts = 0;
 
     for (let i = 0; i < simData.length; i++) {
         let d = simData[i];
@@ -608,6 +619,7 @@ function runContinuousBacktest() {
                 if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
                 realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
                 contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
+                totalTrades++; // 記錄停利趟數
             } else if (!autoTP && d.high > peak) {
                 peak = d.high; currentLevel = 0; 
             }
@@ -620,7 +632,10 @@ function runContinuousBacktest() {
             if (mode === 'inc') qty = currentLevel;
             else if (mode === 'step2') qty = Math.ceil(currentLevel / 2);
             else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
+            
             contracts += qty;
+            if (contracts > maxContracts) maxContracts = contracts; // 記錄過程最大口數
+
             totalCost += (Math.min(target, d.open) * qty);
             target = peak * (1 - (currentLevel + 1) * stepPct);
         }
@@ -654,11 +669,17 @@ function runContinuousBacktest() {
             });
         }
     }
-    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit);
+    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit, totalTrades, maxContracts);
 }
 
-function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit) {
+function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTrades, maxContracts) {
     let finalEquity = log.length > 0 ? log[log.length-1].equity : 0;
+    let finalQty = log.length > 0 ? log[log.length-1].qty : 0;
+
+    // 更新新加入的卡片
+    document.getElementById('cardTrades').innerText = `${totalTrades} 趟`;
+    document.getElementById('cardContracts').innerText = `${finalQty} 口`;
+    document.getElementById('cardMaxContracts').innerText = `過程最大: ${maxContracts} 口`;
 
     document.getElementById('cardRealized').innerText = `+$${Math.round(finalRealized).toLocaleString()}`;
     document.getElementById('cardSuggestedBase').innerText = `$${Math.round(maxDeficit).toLocaleString()}`;
