@@ -2,17 +2,27 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>微台指逆向佈建分析 - ETF 資金對比版</title>
+    <title>微台指逆向佈建分析 - 雙核全功能版 (靜態 ETF 對比 + 動態生存雷達)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; background: #121212; color: #e0e0e0; padding: 20px; }
         .container { max-width: 1550px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { color: #5dade2; margin-top: 0; border-bottom: 2px solid #34495e; padding-bottom: 10px; }
+        
+        .tabs { display: flex; border-bottom: 2px solid #333; margin-bottom: 20px; }
+        .tab-btn { background: none; border: none; color: #888; padding: 12px 24px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .tab-btn:hover { color: #fff; }
+        .tab-btn.active { color: #5dade2; border-bottom: 3px solid #5dade2; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
         .config-panel { display: flex; gap: 15px; flex-wrap: wrap; background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; align-items: flex-end; }
         .input-item { display: flex; flex-direction: column; gap: 5px; }
-        input, button { padding: 10px; border-radius: 6px; border: 1px solid #333; background: #333; color: white; font-size: 14px; }
+        input, select, button { padding: 10px; border-radius: 6px; border: 1px solid #333; background: #333; color: white; font-size: 14px; }
         
         .sim-input { border-color: #f1c40f; background: rgba(241, 196, 15, 0.1); }
+        .toggle-group { display: flex; align-items: center; gap: 8px; background: #1a252f; padding: 10px; border-radius: 6px; border: 1px solid #34495e; }
         
         button { background: #3498db; cursor: pointer; border: none; font-weight: bold; min-width: 120px; transition: 0.2s; }
         button:hover { background: #2980b9; }
@@ -21,12 +31,10 @@
         
         .table-wrapper { overflow-x: auto; max-height: 750px; overflow-y: auto; border: 1px solid #444; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        
         th { position: sticky; top: 0; background: #2c3e50; color: #5dade2; z-index: 10; padding: 12px; border: 1px solid #444; transition: background 0.2s; white-space: nowrap; }
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: #34495e; color: #fff; }
         .sort-icon { font-size: 0.8em; color: #aaa; margin-left: 4px; }
-
         td { padding: 10px; border: 1px solid #333; text-align: right; }
         tr:hover { background: #2a2a2a; }
         
@@ -35,22 +43,30 @@
         .highlight-bounce { color: #9b59b6; font-weight: bold; }
         .sticky-col { position: sticky; left: 0; background: #1e1e1e; z-index: 5; text-align: center; border-right: 2px solid #333; }
         
+        /* 靜態表專用樣式 */
         .strategy-label { font-size: 11px; color: #aaa; text-align: center; }
         .str-flat { color: #bdc3c7; }
         .str-inc { color: #e74c3c; font-weight: bold; }
         .str-step { color: #f39c12; font-weight: bold; }
         .str-step3 { color: #3498db; font-weight: bold; }
-
         .row-bg-0 td { background: rgba(255, 255, 255, 0); }
         .row-bg-1 td { background: rgba(52, 152, 219, 0.05); }
         .row-bg-2 td { background: rgba(46, 204, 113, 0.05); }
         .row-bg-3 td { background: rgba(155, 89, 182, 0.05); border-bottom: 2px solid #444; }
-
         .sim-row td { background: rgba(241, 196, 15, 0.15) !important; border-top: 2px solid #f1c40f; }
         .sim-row-1 td { background: rgba(241, 196, 15, 0.15) !important; }
         .sim-row-2 td { background: rgba(241, 196, 15, 0.15) !important; border-bottom: 2px solid #f1c40f; }
         .sim-row .sticky-col, .sim-row-1 .sticky-col, .sim-row-2 .sticky-col { background: #2c2710 !important; color: #f1c40f; font-weight: bold; }
 
+        /* 動態表專用樣式 */
+        .danger-row { background-color: rgba(231, 76, 60, 0.2) !important; color: #ff7675; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: #252525; padding: 15px; border-radius: 8px; border-left: 5px solid #5dade2; text-align: center; }
+        .card h4 { margin: 0 0 10px 0; color: #aaa; font-size: 13px; }
+        .card .val { font-size: 22px; font-weight: bold; color: #fff; }
+        .chart-container { background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; height: 500px; resize: vertical; overflow: hidden; border: 1px solid #444; }
+
+        /* Modal 樣式 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #1e1e1e; padding: 25px; border-radius: 10px; width: 95%; max-width: 1300px; max-height: 85vh; overflow-y: auto; border: 1px solid #555; box-shadow: 0 5px 30px rgba(0,0,0,0.8); position: relative; }
         .modal-close { position: absolute; top: 15px; right: 20px; background: #ff6b6b; padding: 6px 15px; border-radius: 5px; color: white; border: none; font-weight: bold; cursor: pointer; }
@@ -58,27 +74,26 @@
         .modal-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .modal-table th, .modal-table td { border: 1px solid #444; padding: 10px; text-align: right; }
         .modal-table th { background: #34495e; color: #fff; text-align: center; position: sticky; top: 0; font-size: 13px; }
-        .modal-table td { font-size: 13px; }
-        
         .btn-detail { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
         .btn-detail:hover { background: #2ecc71; transform: scale(1.05); }
         .btn-disabled { background: #555; color: #888; cursor: not-allowed; }
-        
         .cash-box { display: inline-block; padding: 8px 12px; border-radius: 5px; margin-right: 10px; font-size: 14px; margin-top: 5px; }
         .cash-futures { background: rgba(243, 156, 18, 0.15); border: 1px solid #f39c12; }
         .cash-etf1 { background: rgba(52, 152, 219, 0.15); border: 1px solid #3498db; }
         .cash-etf2 { background: rgba(155, 89, 182, 0.15); border: 1px solid #9b59b6; }
     </style>
 </head>
-<body onload="handleCalculate()">
-
-<div class="container">
-    <h2>微台指逆向佈建 - ETF 資金對比版 (支援內建與外部上傳)</h2>
+<body onload="handleCalculate()"> <div class="container">
+    <h2>微台指逆向佈建 - 雙核全功能版 (靜態分析 + 動態生存雷達)</h2>
     
-    <div class="config-panel">
+    <div class="config-panel" style="background: #1a252f; border: 1px solid #34495e;">
         <div class="input-item">
-            <label>1. 外部檔案 (選填，不傳就用內建)</label>
-            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
+            <label style="color: #f1c40f;">📁 外部檔案 (共用)</label>
+            <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" onchange="parseFile(event)">
+        </div>
+        <div class="input-item">
+            <label style="color: #2ecc71;">💰 預計投入本金 (萬元)</label>
+            <input type="number" id="initCapital" value="50" style="width: 100px; font-weight:bold; color:#2ecc71;" title="供動態生存雷達使用">
         </div>
         <div class="input-item">
             <label>固定進場比例(%)</label>
@@ -88,44 +103,118 @@
             <label>預估保證金比率(%)</label>
             <input type="number" id="marginRatio" value="8" style="width: 120px;">
         </div>
-        
-        <div style="width: 2px; background: #444; margin: 0 10px; height: 50px;"></div>
-        
-        <div class="input-item">
-            <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬最高點</label>
-            <input type="number" id="simPeak" class="sim-input" placeholder="例: 26000" style="width: 100px;">
-        </div>
-        <div class="input-item">
-            <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬回檔(%)</label>
-            <input type="number" id="simDropPct" class="sim-input" placeholder="例: 35" style="width: 100px;">
-        </div>
-
-        <button class="btn-calc" onclick="handleCalculate()">重新計算 / 更新數據</button>
+        <div id="fileStatus" style="color: #aaa; font-size: 13px; margin-left: 10px; align-self: center;">尚未載入外部檔案，預設套用內建 25 年資料。</div>
     </div>
 
-    <div id="status" style="margin-bottom:10px; color: #aaa; font-size: 14px;">不選檔案可直接點擊「計算」套用內建的25年波段回檔精華；或上傳自己的資料檔。</div>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(1)">📊 波段極限分析 (靜態 ETF 對比)</button>
+        <button class="tab-btn" onclick="switchTab(2)">📈 歷史連續回測 (動態生存雷達)</button>
+    </div>
 
-    <div class="table-wrapper">
-        <table id="resultTable">
-            <thead>
-                <tr>
-                    <th class="sticky-col sortable" onclick="sortData('rank')">原排名 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('date')">起點日期 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('peak')">最高價 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('trough')">最低價 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('dropPct')">最大跌幅 <span class="sort-icon"></span></th>
-                    <th>加碼口數方式</th>
-                    <th>預估保證金</th>
-                    <th class="sortable" onclick="sortData('count')">最終口數 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('loss')">最大浮虧 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('bounce')" title="從最低點需要往上漲幾%才能讓帳戶損益兩平">打平需反彈(%) <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('safety')">總安全準備金 <span class="sort-icon"></span></th>
-                    <th class="sortable" onclick="sortData('profit')" title="大盤漲回原先最高點(起跌點)時的總獲利">回升高點獲利 <span class="sort-icon"></span></th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-        </table>
+    <div id="tab1" class="tab-content active">
+        <div class="config-panel">
+            <div class="input-item">
+                <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬最高點</label>
+                <input type="number" id="simPeak" class="sim-input" placeholder="例: 26000" style="width: 100px;">
+            </div>
+            <div class="input-item">
+                <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬回檔(%)</label>
+                <input type="number" id="simDropPct" class="sim-input" placeholder="例: 35" style="width: 100px;">
+            </div>
+            <button class="btn-calc" onclick="handleCalculate()">重新計算 / 更新數據</button>
+        </div>
+        
+        <div id="status" style="margin-bottom:10px; color: #aaa; font-size: 14px;">不選檔案可直接點擊「計算」套用內建的25年波段回檔精華；或上傳自己的資料檔。</div>
+
+        <div class="table-wrapper">
+            <table id="resultTable">
+                <thead>
+                    <tr>
+                        <th class="sticky-col sortable" onclick="sortData('rank')">原排名 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('date')">起點日期 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('peak')">最高價 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('trough')">最低價 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('dropPct')">最大跌幅 <span class="sort-icon"></span></th>
+                        <th>加碼口數方式</th>
+                        <th>預估保證金</th>
+                        <th class="sortable" onclick="sortData('count')">最終口數 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('loss')">最大浮虧 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('bounce')" title="從最低點需要往上漲幾%才能讓帳戶損益兩平">打平需反彈(%) <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('safety')">總安全準備金 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('profit')" title="大盤漲回原先最高點(起跌點)時的總獲利">回升高點獲利 <span class="sort-icon"></span></th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tab2" class="tab-content">
+        <div class="config-panel" style="border-left: 4px solid #e67e22;">
+            <div class="input-item"><label>開始年月</label><input type="date" id="btStartDate" value="2000-01-01"></div>
+            <div class="input-item"><label>結束年月</label><input type="date" id="btEndDate"></div>
+            <div class="input-item">
+                <label>動態入單規則</label>
+                <select id="btMode">
+                    <option value="flat">等量 (1, 1, 1...)</option>
+                    <option value="inc">遞增 (1, 2, 3...)</option>
+                    <option value="step2">雙階梯 (1, 1, 2, 2...)</option>
+                    <option value="step3">三階梯 (1, 1, 1, 2, 2, 2...)</option>
+                </select>
+            </div>
+            <div style="width: 2px; background: #444; margin: 0 5px; height: 40px;"></div>
+            <div class="input-item">
+                <label style="color: #5dade2;">停利機制設定</label>
+                <div class="toggle-group">
+                    <input type="checkbox" id="autoTP" checked onchange="toggleTPOptions()" style="width: 20px; height: 20px; cursor: pointer;"> 
+                    <span id="tpLabel">啟用自動停利</span>
+                    <span id="tpOptionsBox" style="margin-left: 10px;">
+                        突破起跌點 <input type="number" id="tpPct" value="0" step="0.5" style="width: 60px; padding: 5px;"> % 後平倉
+                    </span>
+                </div>
+            </div>
+            <button class="btn-calc" style="background:#e67e22;" onclick="runContinuousBacktest()">▶ 開始連續存活回測</button>
+        </div>
+
+        <div class="summary-grid">
+            <div class="card" style="border-color: #3498db;">
+                <h4>累計已實現獲利</h4>
+                <div class="val pos" id="cardRealized">$0</div>
+            </div>
+            <div class="card" style="border-color: #e67e22;">
+                <h4 title="根據回測結果，您初始最少要準備多少錢才不會斷頭">建議最低準備本金</h4>
+                <div class="val" id="cardSuggestedBase" style="color: #f1c40f;">$0</div>
+            </div>
+            <div class="card" style="border-color: #e74c3c;">
+                <h4 title="帳戶權益 - 保證金 的最小值。若為負數代表您設定的本金已歸零。">過程最危急可用資金</h4>
+                <div class="val" id="cardMinFreeMargin">$0</div>
+            </div>
+            <div class="card" style="border-color: #2ecc71;">
+                <h4>期末帳戶權益 (總資產淨值)</h4>
+                <div class="val pos" id="cardEquity">$0</div>
+            </div>
+        </div>
+
+        <div class="chart-container"><canvas id="btChart"></canvas></div>
+
+        <div class="table-wrapper">
+            <table id="btTable" style="width:100%; font-size:13px; border-collapse: collapse;">
+                <thead>
+                    <tr>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; text-align:center;">結算日期</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">大盤收盤</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">持有口數</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">浮動損益 (A)</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #2ecc71; padding: 12px; border: 1px solid #444;">帳戶權益 (B)</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #f1c40f; padding: 12px; border: 1px solid #444;">佔用保證金 (C)</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #e67e22; padding: 12px; border: 1px solid #444;" title="帳戶權益減去保證金">可用資金 (B-C)</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">存活狀態</th>
+                    </tr>
+                </thead>
+                <tbody id="btTableBody"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -138,7 +227,7 @@
 </div>
 
 <script>
-// 內建過去 25 年台指期跌幅最大的 30 次波段回檔
+// ================= 全域變數 =================
 const top30Drawdowns = [
   { date: "2007/10/22", peak: 9675.0, trough: 3811.0, dropPct: 0.606098 },
   { date: "2002/04/15", peak: 6398.0, trough: 3780.0, dropPct: 0.409190 },
@@ -172,9 +261,26 @@ const top30Drawdowns = [
   { date: "2006/12/04", peak: 7633.0, trough: 7376.0, dropPct: 0.033669 }
 ];
 
-let globalData = [];
+let globalRawData = [];
+let globalData = []; // for static table
 let currentSortCol = 'dropPct'; 
 let isAscending = false; 
+
+let chartInstance = null;
+let mousePosition = null;
+
+// ================= UI 互動邏輯 =================
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => btn.className = (i + 1 === tabId) ? 'tab-btn active' : 'tab-btn');
+    document.querySelectorAll('.tab-content').forEach((content, i) => content.className = (i + 1 === tabId) ? 'tab-content active' : 'tab-content');
+}
+
+function toggleTPOptions() {
+    const isTP = document.getElementById('autoTP').checked;
+    document.getElementById('tpOptionsBox').style.opacity = isTP ? "1" : "0.3";
+    document.getElementById('tpOptionsBox').style.pointerEvents = isTP ? "auto" : "none";
+    document.getElementById('tpLabel').innerText = isTP ? "啟用自動停利" : "不停利 (持續買進)";
+}
 
 function formatDate(val) {
     if (!val) return "無日期";
@@ -183,18 +289,47 @@ function formatDate(val) {
     return val.toString().replace(/\//g, '-').split(' ')[0];
 }
 
+// ================= 檔案讀取 (共用) =================
+function parseFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    document.getElementById('fileStatus').innerText = "讀取中...";
+    const reader = new FileReader();
+    reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, {type: 'array', cellDates: true});
+        const sheetData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        
+        const closeKey = Object.keys(sheetData[0]).find(k => k.match(/收盤|Close/i));
+        const lowKey = Object.keys(sheetData[0]).find(k => k.match(/最低|Low/i));
+        const highKey = Object.keys(sheetData[0]).find(k => k.match(/最高|High/i));
+        const openKey = Object.keys(sheetData[0]).find(k => k.match(/開盤|Open/i));
+        const dateKey = Object.keys(sheetData[0]).find(k => k.match(/時間|日期|Date/i));
+
+        if (!closeKey || !lowKey || !highKey) { alert("找不到必要的數據欄位！"); return; }
+
+        globalRawData = sheetData.map(row => ({
+            date: formatDate(row[dateKey]),
+            open: parseFloat(row[openKey] || row[closeKey]),
+            high: parseFloat(row[highKey]),
+            low: parseFloat(row[lowKey]),
+            close: parseFloat(row[closeKey])
+        })).filter(d => !isNaN(d.close));
+        
+        globalRawData.sort((a, b) => new Date(a.date) - new Date(b.date));
+        document.getElementById('fileStatus').innerText = `✅ 成功載入 ${globalRawData.length} 筆歷史資料！`;
+        
+        // 如果是在 Tab 1，自動執行計算
+        if(document.getElementById('tab1').classList.contains('active')) handleCalculate();
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+// ================= Tab 1: 靜態分析與 ETF 對比 (完整保留原邏輯) =================
 function handleCalculate() {
-    const file = document.getElementById('fileInput').files[0];
     document.getElementById('status').innerText = "系統正在計算並套用策略，請稍候...";
-    
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array', cellDates: true});
-            extractAndRunAnalysis(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
-        };
-        reader.readAsArrayBuffer(file);
+    if (globalRawData.length > 0) {
+        extractAndRunAnalysis(globalRawData);
     } else {
         runAnalysisWithList(top30Drawdowns);
         document.getElementById('status').innerText = `已成功套用內建的25年精華波段資料。`;
@@ -202,23 +337,13 @@ function handleCalculate() {
 }
 
 function extractAndRunAnalysis(data) {
-    const firstRow = data[0];
-    const closeKey = Object.keys(firstRow).find(k => k.match(/收盤|Close/i));
-    const lowKey = Object.keys(firstRow).find(k => k.match(/最低|Low/i));
-    const dateKey = Object.keys(firstRow).find(k => k.match(/時間|日期|Date/i));
-
-    if (!closeKey || !lowKey) { alert("找不到必要的數據欄位 (收盤價、最低價)！"); return; }
-
     let peak = -Infinity, allDDs = [], currentDD = null;
-    
     data.forEach(row => {
-        const c = parseFloat(row[closeKey]), l = parseFloat(row[lowKey]);
-        if (isNaN(c)) return;
-
+        const c = row.close, l = row.low;
         if (c > peak) {
             if (currentDD) allDDs.push(currentDD);
             peak = c;
-            currentDD = { peak, trough: l, date: formatDate(row[dateKey]) };
+            currentDD = { peak, trough: l, date: row.date };
         } else if (currentDD) {
             if (l < currentDD.trough) currentDD.trough = l;
         }
@@ -229,7 +354,7 @@ function extractAndRunAnalysis(data) {
     allDDs.sort((a, b) => b.dropPct - a.dropPct);
     
     runAnalysisWithList(allDDs.slice(0, 30));
-    document.getElementById('status').innerText = `已從外部檔案中萃取跌幅最大的 ${globalData.length- (document.getElementById('simPeak').value>0?1:0)} 筆資料並完成計算！`;
+    document.getElementById('status').innerText = `已從外部檔案中萃取跌幅最大的 ${globalData.length - (document.getElementById('simPeak').value>0?1:0)} 筆資料並完成計算！`;
 }
 
 function runAnalysisWithList(ddList) {
@@ -243,10 +368,10 @@ function runAnalysisWithList(ddList) {
         return {
             isSim: false, rank: i + 1, date: dd.date, peak: dd.peak, trough: dd.trough,
             dropPct: dd.dropPct, estMargin: margin,
-            resFlat: simulate(dd.peak, simulatedPrices, stepPct, 'flat', ptVal, margin),
-            resInc: simulate(dd.peak, simulatedPrices, stepPct, 'incremental', ptVal, margin),
-            resStep: simulate(dd.peak, simulatedPrices, stepPct, 'stepped', ptVal, margin),
-            resStep3: simulate(dd.peak, simulatedPrices, stepPct, 'stepped3', ptVal, margin)
+            resFlat: simulateStatic(dd.peak, simulatedPrices, stepPct, 'flat', ptVal, margin),
+            resInc: simulateStatic(dd.peak, simulatedPrices, stepPct, 'incremental', ptVal, margin),
+            resStep: simulateStatic(dd.peak, simulatedPrices, stepPct, 'stepped', ptVal, margin),
+            resStep3: simulateStatic(dd.peak, simulatedPrices, stepPct, 'stepped3', ptVal, margin)
         };
     });
 
@@ -259,17 +384,16 @@ function runAnalysisWithList(ddList) {
         globalData.push({
             isSim: true, rank: '⭐', date: '【自訂模擬情境】', peak: simPeakVal, trough: simTrough,
             dropPct: simDropPctVal, estMargin: margin,
-            resFlat: simulate(simPeakVal, prices, stepPct, 'flat', ptVal, margin),
-            resInc: simulate(simPeakVal, prices, stepPct, 'incremental', ptVal, margin),
-            resStep: simulate(simPeakVal, prices, stepPct, 'stepped', ptVal, margin),
-            resStep3: simulate(simPeakVal, prices, stepPct, 'stepped3', ptVal, margin)
+            resFlat: simulateStatic(simPeakVal, prices, stepPct, 'flat', ptVal, margin),
+            resInc: simulateStatic(simPeakVal, prices, stepPct, 'incremental', ptVal, margin),
+            resStep: simulateStatic(simPeakVal, prices, stepPct, 'stepped', ptVal, margin),
+            resStep3: simulateStatic(simPeakVal, prices, stepPct, 'stepped3', ptVal, margin)
         });
     }
-
     sortData('dropPct', false);
 }
 
-function simulate(peak, prices, stepPct, mode, ptVal, marginPerContract) {
+function simulateStatic(peak, prices, stepPct, mode, ptVal, marginPerContract) {
     let trades = [], currentLevel = 0, minPrice = peak, totalQty = 0, totalCost = 0;
 
     prices.forEach(p => {
@@ -280,7 +404,6 @@ function simulate(peak, prices, stepPct, mode, ptVal, marginPerContract) {
             currentLevel++; 
             let qty = mode === 'incremental' ? currentLevel : mode === 'stepped' ? Math.ceil(currentLevel / 2) : mode === 'stepped3' ? Math.ceil(currentLevel / 3) : 1;
             
-            // 計算當次 ETF 現貨投入金額 (為了匹配等效期貨曝險)
             let this0050 = target * qty * ptVal; 
             let this00631L = this0050 / 2;
 
@@ -289,25 +412,13 @@ function simulate(peak, prices, stepPct, mode, ptVal, marginPerContract) {
 
             totalQty += qty;
             totalCost += (target * qty);
-            
-            // 由於每次觸發加碼，代表舊部位經歷了下跌，我們在此刻計算【剛觸發這筆交易時的總浮虧】
-            // (新加碼的部位剛買進，損益為0，所以虧損完全來自於舊部位)
             let currentLoss = prevTotalQty > 0 ? (target - prevAvgCost) * prevTotalQty * ptVal : 0;
 
             trades.push({ 
-                level: currentLevel, 
-                price: target, 
-                qty, 
-                totalQty, 
-                avgCost: totalCost / totalQty, 
-                margin: totalQty * marginPerContract,
-                this0050: this0050,
-                this00631L: this00631L,
-                cum0050: totalCost * ptVal,
-                cum00631L: totalCost * ptVal / 2,
-                currentLoss: currentLoss
+                level: currentLevel, price: target, qty, totalQty, avgCost: totalCost / totalQty, 
+                margin: totalQty * marginPerContract, this0050: this0050, this00631L: this00631L,
+                cum0050: totalCost * ptVal, cum00631L: totalCost * ptVal / 2, currentLoss: currentLoss
             });
-            
             target = peak * (1 - (currentLevel + 1) * stepPct);
         }
     });
@@ -318,9 +429,7 @@ function simulate(peak, prices, stepPct, mode, ptVal, marginPerContract) {
     const loss = Math.round((minPrice - avgCost) * totalQty * ptVal);
     const safety = Math.abs(loss) + (totalQty * marginPerContract);
     const bouncePct = ((avgCost - minPrice) / minPrice) * 100; 
-    
     const profitAtPeak = Math.round((peak - avgCost) * totalQty * ptVal);
-    
     const totalExposure = totalCost * ptVal; 
     const etf0050 = totalExposure; 
     const etf00631L = totalExposure / 2; 
@@ -346,14 +455,8 @@ function showDetails(index, mode) {
         html += `<div style="padding: 20px; text-align: center; color: #aaa;">未觸發進場。</div>`;
     } else {
         html += `<table class="modal-table"><thead><tr>
-                    <th>階段</th>
-                    <th>成交價</th>
-                    <th>新增口數</th>
-                    <th>總成本<br>(期貨均價)</th>
-                    <th>期貨<br>累積保證金</th>
-                    <th style="color:#5dade2;">0050<br>當次投入本金(累計)</th>
-                    <th style="color:#9b59b6;">正2 (00631L)<br>當次投入本金(累計)</th>
-                    <th title="三種商品因為總曝險金額相同，所以絕對浮虧數字是一樣的！">觸發當下<br>總浮動虧損</th>
+                    <th>階段</th><th>成交價</th><th>新增口數</th><th>總成本<br>(期貨均價)</th><th>期貨<br>累積保證金</th>
+                    <th style="color:#5dade2;">0050<br>當次投入本金(累計)</th><th style="color:#9b59b6;">正2 (00631L)<br>當次投入本金(累計)</th><th title="三種商品因為總曝險金額相同，所以絕對浮虧數字是一樣的！">觸發當下<br>總浮動虧損</th>
                  </tr></thead><tbody>`;
                  
         data.trades.forEach(t => {
@@ -372,7 +475,6 @@ function showDetails(index, mode) {
         
         const bottomLoss = Math.round((item.trough - data.avgCost) * data.count * 10);
         html += `</tbody></table>
-        
         <div style="margin-top:15px; padding:15px; background:rgba(231,76,60,0.15); border-left:5px solid #e74c3c; border-radius:4px;">
             <h4 style="margin:0 0 10px 0; color:#ff6b6b;">⚠️ 壓力測試與獲利預估</h4>
             殺到最低點時的浮動虧損： <span class="neg">-$${Math.abs(bottomLoss).toLocaleString()}</span><br>
@@ -380,14 +482,12 @@ function showDetails(index, mode) {
             <strong>🟢 打平所需反彈：從最低點往上漲 <span class="highlight-bounce">${data.bouncePct.toFixed(2)}%</span> 即可損益兩平 (回本價: ${Math.round(data.avgCost).toLocaleString()})</strong><br>
             <strong>🚀 回升至起跌點 (${Math.round(item.peak).toLocaleString()}) 總獲利： <span class="pos">+$${data.profitAtPeak.toLocaleString()}</span></strong>
         </div>
-
         <div style="margin-top:15px; padding:15px; background:#1e272e; border-radius:4px; border: 1px solid #444;">
             <h4 style="margin:0 0 10px 0; color:#5dade2;">💡 要達到上述相同部位與獲利，不同工具的極限資金比較：</h4>
             <div class="cash-box cash-futures"><strong>期貨安全金： $${data.safety.toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(最大浮虧 + 每口$${item.estMargin.toLocaleString()}保證金)</span></div>
             <div class="cash-box cash-etf1"><strong>0050 (1倍) 總現金： $${Math.round(data.etf0050).toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(全程不開槓桿，完全買入現貨)</span></div>
             <div class="cash-box cash-etf2"><strong>00631L (正2) 總現金： $${Math.round(data.etf00631L).toLocaleString()}</strong> <br><span style="font-size: 12px; color:#aaa;">(利用兩倍槓桿減少 50% 的現金投入)</span></div>
-        </div>
-        `;
+        </div>`;
     }
     document.getElementById('modalBody').innerHTML = html;
     document.getElementById('detailsModal').style.display = 'flex';
@@ -420,8 +520,8 @@ function sortData(col, forceAsc = null) {
 }
 
 function updateSortIcons() {
-    document.querySelectorAll('th.sortable').forEach(th => th.querySelector('.sort-icon').innerText = '↕');
-    document.querySelectorAll('th.sortable').forEach(th => {
+    document.querySelectorAll('#resultTable th.sortable').forEach(th => th.querySelector('.sort-icon').innerText = '↕');
+    document.querySelectorAll('#resultTable th.sortable').forEach(th => {
         if(th.getAttribute('onclick').includes(currentSortCol)) {
             th.querySelector('.sort-icon').innerText = isAscending ? '▲' : '▼';
             th.querySelector('.sort-icon').style.color = '#f1c40f';
@@ -451,31 +551,250 @@ function renderTable() {
             else tr.className = `row-bg-${sIdx}`;
 
             if (sIdx === 0) {
-                tr.innerHTML = `
-                    <td rowspan="4" class="sticky-col">${item.isSim ? "⭐ 模擬" : 'No.'+item.rank}</td>
-                    <td rowspan="4" style="text-align:center">${item.date}</td>
-                    <td rowspan="4">${Math.round(item.peak).toLocaleString()}</td>
-                    <td rowspan="4">${Math.round(item.trough).toLocaleString()}</td>
-                    <td rowspan="4" class="neg">-${dropStr}%</td>
-                `;
+                tr.innerHTML = `<td rowspan="4" class="sticky-col">${item.isSim ? "⭐ 模擬" : 'No.'+item.rank}</td>
+                                <td rowspan="4" style="text-align:center">${item.date}</td>
+                                <td rowspan="4">${Math.round(item.peak).toLocaleString()}</td>
+                                <td rowspan="4">${Math.round(item.trough).toLocaleString()}</td>
+                                <td rowspan="4" class="neg">-${dropStr}%</td>`;
             }
             
             const btn = s.data.count > 0 
                 ? `<button class="btn-detail" onclick="showDetails(${i}, '${s.mode}')">🔍 明細與資金</button>` 
                 : `<button class="btn-detail btn-disabled" disabled>未觸發</button>`;
 
-            tr.innerHTML += `
-                <td class="strategy-label ${s.css}">${s.name}</td>
-                <td style="color:#888">$${item.estMargin.toLocaleString()}</td>
-                <td>${s.data.count} 口</td>
-                <td class="neg">-$${Math.abs(s.data.loss).toLocaleString()}</td>
-                <td class="highlight-bounce">${s.data.count > 0 ? s.data.bouncePct.toFixed(2) + '%' : '-'}</td>
-                <td style="color:#f39c12; font-weight:bold">$${s.data.safety.toLocaleString()}</td>
-                <td class="pos" style="font-weight:bold;">+$${s.data.count > 0 ? s.data.profitAtPeak.toLocaleString() : '0'}</td>
-                <td style="text-align:center;">${btn}</td>
-            `;
+            tr.innerHTML += `<td class="strategy-label ${s.css}">${s.name}</td>
+                             <td style="color:#888">$${item.estMargin.toLocaleString()}</td>
+                             <td>${s.data.count} 口</td>
+                             <td class="neg">-$${Math.abs(s.data.loss).toLocaleString()}</td>
+                             <td class="highlight-bounce">${s.data.count > 0 ? s.data.bouncePct.toFixed(2) + '%' : '-'}</td>
+                             <td style="color:#f39c12; font-weight:bold">$${s.data.safety.toLocaleString()}</td>
+                             <td class="pos" style="font-weight:bold;">+$${s.data.count > 0 ? s.data.profitAtPeak.toLocaleString() : '0'}</td>
+                             <td style="text-align:center;">${btn}</td>`;
             tbody.appendChild(tr);
         });
+    });
+}
+
+// ================= Tab 2: 動態連續生存回測 (最新資金精算版) =================
+function runContinuousBacktest() {
+    if (globalRawData.length === 0) { alert("⚠️ 請先上傳歷史 K 線資料！"); return; }
+
+    const initCapital = (parseFloat(document.getElementById('initCapital').value) || 0) * 10000;
+    const stepPct = parseFloat(document.getElementById('stepPct').value) / 100;
+    const marginRatio = parseFloat(document.getElementById('marginRatio').value) / 100;
+    const mode = document.getElementById('btMode').value;
+    const autoTP = document.getElementById('autoTP').checked;
+    const tpPct = parseFloat(document.getElementById('tpPct').value);
+    const ptVal = 10; 
+
+    const startStr = document.getElementById('btStartDate').value;
+    const endStr = document.getElementById('btEndDate').value;
+    const startDate = startStr ? new Date(startStr) : new Date('2000-01-01');
+    const endDate = endStr ? new Date(endStr) : new Date('2099-12-31');
+
+    const simData = globalRawData.filter(d => { let dt = new Date(d.date); return dt >= startDate && dt <= endDate; });
+    if (simData.length === 0) { alert("所選日期區間內沒有資料！"); return; }
+
+    let peak = simData[0].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
+    let minFreeMargin = initCapital, maxDeficit = 0, log = [];
+
+    for (let i = 0; i < simData.length; i++) {
+        let d = simData[i];
+        let tpTarget = peak * (1 + (tpPct / 100));
+
+        if (contracts > 0) {
+            if (autoTP && d.high >= tpTarget) {
+                let exitPrice = Math.max(tpTarget, d.open);
+                if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
+                realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
+                contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
+            } else if (!autoTP && d.high > peak) {
+                peak = d.high; currentLevel = 0; 
+            }
+        } else if (d.high > peak) peak = d.high;
+
+        let target = peak * (1 - (currentLevel + 1) * stepPct);
+        while (d.low <= target) {
+            currentLevel++;
+            let qty = 1;
+            if (mode === 'inc') qty = currentLevel;
+            else if (mode === 'step2') qty = Math.ceil(currentLevel / 2);
+            else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
+            contracts += qty;
+            totalCost += (Math.min(target, d.open) * qty);
+            target = peak * (1 - (currentLevel + 1) * stepPct);
+        }
+
+        let avgCost = contracts > 0 ? (totalCost / contracts) : 0;
+        let floatPnL_Low = contracts > 0 ? (d.low - avgCost) * contracts * ptVal : 0; 
+        let curMargin = contracts * d.close * ptVal * marginRatio;
+        
+        let curEquity_Low = initCapital + realizedProfit + floatPnL_Low;
+        let curFreeMargin = curEquity_Low - curMargin; 
+
+        if (curFreeMargin < minFreeMargin) minFreeMargin = curFreeMargin;
+        
+        let deficit = curMargin - (realizedProfit + floatPnL_Low);
+        if (deficit > maxDeficit) maxDeficit = deficit;
+
+        let isEOW = (i === simData.length - 1);
+        if (!isEOW) {
+            let nextDay = new Date(simData[i+1].date);
+            if (nextDay.getDay() <= new Date(d.date).getDay() || (nextDay - new Date(d.date)) > 2*86400000) isEOW = true;
+        }
+
+        if (isEOW) {
+            let eowFloatPnL = contracts > 0 ? (d.close - avgCost) * contracts * ptVal : 0;
+            let totalEquity = initCapital + realizedProfit + eowFloatPnL; 
+            let freeMargin = totalEquity - curMargin;
+
+            log.push({
+                date: d.date, close: d.close, qty: contracts, 
+                floatPnL: eowFloatPnL, equity: totalEquity, margin: curMargin, freeMargin: freeMargin
+            });
+        }
+    }
+    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit);
+}
+
+function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit) {
+    let finalEquity = log.length > 0 ? log[log.length-1].equity : 0;
+
+    document.getElementById('cardRealized').innerText = `+$${Math.round(finalRealized).toLocaleString()}`;
+    document.getElementById('cardSuggestedBase').innerText = `$${Math.round(maxDeficit).toLocaleString()}`;
+    
+    let minFreeEl = document.getElementById('cardMinFreeMargin');
+    if (minFreeMargin < 0) {
+        minFreeEl.innerHTML = `⚠️ -$${Math.abs(Math.round(minFreeMargin)).toLocaleString()}<br><span style='font-size:12px;color:#fff;'>本金已歸零！</span>`;
+        minFreeEl.className = "val neg";
+    } else {
+        minFreeEl.innerText = `$${Math.round(minFreeMargin).toLocaleString()}`;
+        minFreeEl.className = "val pos";
+    }
+    
+    let eqEl = document.getElementById('cardEquity');
+    eqEl.innerText = `${finalEquity >= 0 ? '+' : '-'}$${Math.abs(Math.round(finalEquity)).toLocaleString()}`;
+    eqEl.className = finalEquity >= 0 ? "val pos" : "val neg";
+
+    const tbody = document.getElementById('btTableBody');
+    tbody.innerHTML = "";
+    log.forEach(r => {
+        let isDanger = r.freeMargin < 0; 
+        let tr = document.createElement('tr');
+        if (isDanger) tr.className = "danger-row"; 
+        
+        tr.innerHTML = `
+            <td style="text-align:center; border: 1px solid #444; padding: 10px;">${r.date}</td>
+            <td style="text-align:right; border: 1px solid #444; padding: 10px;">${Math.round(r.close).toLocaleString()}</td>
+            <td style="text-align:right; font-weight:bold; color:${r.qty>0 ? '#e67e22' : '#888'}; border: 1px solid #444; padding: 10px;">${r.qty} 口</td>
+            <td style="text-align:right; border: 1px solid #444; padding: 10px;" class="${r.floatPnL < 0 ? 'neg' : 'pos'}">${r.floatPnL !== 0 ? Math.round(r.floatPnL).toLocaleString() : '0'}</td>
+            <td style="text-align:right; color:#2ecc71; font-weight:bold; border: 1px solid #444; padding: 10px;">$${Math.round(r.equity).toLocaleString()}</td>
+            <td style="text-align:right; color:#f1c40f; border: 1px solid #444; padding: 10px;">$${Math.round(r.margin).toLocaleString()}</td>
+            <td style="text-align:right; color:${isDanger ? '#ff4757' : '#e67e22'}; font-weight:bold; border: 1px solid #444; padding: 10px;">${isDanger ? '⚠️ ' : ''}$${Math.round(r.freeMargin).toLocaleString()}</td>
+            <td style="text-align:center; border: 1px solid #444; padding: 10px;">${isDanger ? '<span class="neg">斷頭</span>' : '<span class="pos">存活</span>'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    drawChart(log);
+}
+
+// ================= 圖表外掛區 =================
+const crosshairPlugin = {
+    id: 'crosshair',
+    beforeEvent(chart, args) {
+        const event = args.event;
+        if (event.type === 'mousemove') mousePosition = { x: event.x, y: event.y };
+        else if (event.type === 'mouseout') mousePosition = null;
+    },
+    afterDraw(chart) {
+        if (!mousePosition) return;
+        try {
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+            const { x, y: mouseY } = mousePosition;
+
+            if (x < left || x > right || mouseY < top || mouseY > bottom) return;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.setLineDash([4, 4]);
+            ctx.moveTo(x, top); ctx.lineTo(x, bottom); 
+            ctx.moveTo(left, mouseY); ctx.lineTo(right, mouseY); 
+            ctx.stroke(); ctx.setLineDash([]);
+
+            ctx.font = 'bold 12px sans-serif'; ctx.textBaseline = 'middle';
+            const valY = y.getValueForPixel(mouseY);
+            if (valY !== undefined && !isNaN(valY)) {
+                const textY = '$' + Math.round(valY).toLocaleString();
+                const textWidth = ctx.measureText(textY).width;
+                ctx.fillStyle = 'rgba(46, 204, 113, 1)';
+                ctx.fillRect(left - textWidth - 14, mouseY - 12, textWidth + 14, 24);
+                ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(textY, left - 7, mouseY);
+            }
+            ctx.restore();
+        } catch (e) {}
+    }
+};
+
+const dangerZonePlugin = {
+    id: 'dangerZone',
+    beforeDraw: (chart) => {
+        try {
+            const ctx = chart.ctx;
+            const chartArea = chart.chartArea;
+            if (!chartArea || !chart.data.datasets || chart.data.datasets.length < 3) return;
+            
+            const { top, bottom } = chartArea;
+            const equityData = chart.data.datasets[0].data; 
+            const marginData = chart.data.datasets[1].data; 
+            const meta = chart.getDatasetMeta(0);
+
+            if (!meta.data || meta.data.length === 0) return;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.15)'; 
+
+            for (let i = 0; i < equityData.length; i++) {
+                if (equityData[i] < marginData[i]) { 
+                    const point = meta.data[i];
+                    if (!point) continue;
+                    
+                    const xCenter = point.x;
+                    let halfWidth = 5; 
+                    if (i > 0 && meta.data[i-1]) halfWidth = Math.abs(xCenter - meta.data[i-1].x) / 2;
+                    else if (i < equityData.length - 1 && meta.data[i+1]) halfWidth = Math.abs(meta.data[i+1].x - xCenter) / 2;
+
+                    ctx.fillRect(xCenter - halfWidth, top, halfWidth * 2, bottom - top);
+                }
+            }
+            ctx.restore();
+        } catch (e) {}
+    }
+};
+
+function drawChart(log) {
+    if (chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById('btChart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: log.map(r => r.date),
+            datasets: [
+                { label: '帳戶權益 (Equity)', data: log.map(r => r.equity), borderColor: '#2ecc71', borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' },
+                { label: '佔用保證金 (Margin)', data: log.map(r => r.margin), borderColor: '#f1c40f', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 1, fill: true, pointRadius: 0, yAxisID: 'y' },
+                { label: '可用資金 (Free Cash)', data: log.map(r => r.freeMargin), borderColor: '#e67e22', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'], 
+            scales: {
+                x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { display: false } },
+                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '資金水位 (TWD)', color: '#fff' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+            },
+            plugins: { legend: { labels: { color: '#fff' } }, tooltip: { enabled: true } }
+        },
+        plugins: [dangerZonePlugin, crosshairPlugin] 
     });
 }
 </script>
