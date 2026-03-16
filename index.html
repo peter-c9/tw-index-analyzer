@@ -63,7 +63,7 @@
         .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .card { background: #252525; padding: 15px; border-radius: 8px; border-left: 5px solid #5dade2; text-align: center; display: flex; flex-direction: column; justify-content: center; }
         .card h4 { margin: 0 0 10px 0; color: #aaa; font-size: 13px; }
-        .card .val { font-size: 22px; font-weight: bold; color: #fff; }
+        .card .val { font-size: 22px; font-weight: bold; color: #fff; line-height: 1.4; }
         .chart-container { background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; height: 500px; resize: vertical; overflow: hidden; border: 1px solid #444; }
 
         /* Modal 樣式 */
@@ -83,7 +83,9 @@
         .cash-etf2 { background: rgba(155, 89, 182, 0.15); border: 1px solid #9b59b6; }
     </style>
 </head>
-<body onload="handleCalculate()"> <div class="container">
+<body onload="handleCalculate()">
+
+<div class="container">
     <h2>微台指逆向佈建 - 雙核全功能版 (靜態分析 + 動態生存雷達)</h2>
     
     <div class="config-panel" style="background: #1a252f; border: 1px solid #34495e;">
@@ -216,6 +218,7 @@
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">持有口數</th>
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">浮動損益 (A)</th>
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #2ecc71; padding: 12px; border: 1px solid #444;">帳戶權益 (B)</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #9b59b6; padding: 12px; border: 1px solid #444;" title="帳戶總資產淨值 / 投入本金">權益/本金比</th>
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #f1c40f; padding: 12px; border: 1px solid #444;">佔用保證金 (C)</th>
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #e67e22; padding: 12px; border: 1px solid #444;" title="帳戶權益減去保證金">可用資金 (B-C)</th>
                         <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">存活狀態</th>
@@ -271,12 +274,21 @@ const top30Drawdowns = [
 ];
 
 let globalRawData = [];
-let globalData = []; // for static table
+let globalData = []; 
 let currentSortCol = 'dropPct'; 
 let isAscending = false; 
 
 let chartInstance = null;
 let mousePosition = null;
+
+// ================= 大單位轉換器 =================
+function formatUnit(val) {
+    let absVal = Math.abs(val);
+    if (absVal >= 1000000000000) return (absVal / 1000000000000).toFixed(1) + " 兆";
+    if (absVal >= 100000000) return (absVal / 100000000).toFixed(1) + " 億";
+    if (absVal >= 10000) return (absVal / 10000).toFixed(1) + " 萬";
+    return Math.round(absVal).toLocaleString();
+}
 
 // ================= UI 互動邏輯 =================
 function switchTab(tabId) {
@@ -606,7 +618,6 @@ function runContinuousBacktest() {
     let peak = simData[0].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
     let minFreeMargin = initCapital, maxDeficit = 0, log = [];
     
-    // 新增：統計成功趟數與最大口數
     let totalTrades = 0, maxContracts = 0;
 
     for (let i = 0; i < simData.length; i++) {
@@ -619,7 +630,7 @@ function runContinuousBacktest() {
                 if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
                 realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
                 contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
-                totalTrades++; // 記錄停利趟數
+                totalTrades++; 
             } else if (!autoTP && d.high > peak) {
                 peak = d.high; currentLevel = 0; 
             }
@@ -634,7 +645,7 @@ function runContinuousBacktest() {
             else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
             
             contracts += qty;
-            if (contracts > maxContracts) maxContracts = contracts; // 記錄過程最大口數
+            if (contracts > maxContracts) maxContracts = contracts; 
 
             totalCost += (Math.min(target, d.open) * qty);
             target = peak * (1 - (currentLevel + 1) * stepPct);
@@ -662,39 +673,51 @@ function runContinuousBacktest() {
             let eowFloatPnL = contracts > 0 ? (d.close - avgCost) * contracts * ptVal : 0;
             let totalEquity = initCapital + realizedProfit + eowFloatPnL; 
             let freeMargin = totalEquity - curMargin;
+            // 計算權益本金比
+            let eqRatio = initCapital > 0 ? (totalEquity / initCapital * 100) : 0;
 
             log.push({
                 date: d.date, close: d.close, qty: contracts, 
-                floatPnL: eowFloatPnL, equity: totalEquity, margin: curMargin, freeMargin: freeMargin
+                floatPnL: eowFloatPnL, equity: totalEquity, margin: curMargin, freeMargin: freeMargin,
+                equityRatio: eqRatio
             });
         }
     }
-    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit, totalTrades, maxContracts);
+    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit, totalTrades, maxContracts, initCapital);
 }
 
-function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTrades, maxContracts) {
+function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTrades, maxContracts, initCapital) {
     let finalEquity = log.length > 0 ? log[log.length-1].equity : 0;
     let finalQty = log.length > 0 ? log[log.length-1].qty : 0;
 
-    // 更新新加入的卡片
     document.getElementById('cardTrades').innerText = `${totalTrades} 趟`;
     document.getElementById('cardContracts').innerText = `${finalQty} 口`;
     document.getElementById('cardMaxContracts').innerText = `過程最大: ${maxContracts} 口`;
 
-    document.getElementById('cardRealized').innerText = `+$${Math.round(finalRealized).toLocaleString()}`;
-    document.getElementById('cardSuggestedBase').innerText = `$${Math.round(maxDeficit).toLocaleString()}`;
+    let realSign = finalRealized >= 0 ? '+' : '-';
+    document.getElementById('cardRealized').innerHTML = `${realSign}$${Math.abs(Math.round(finalRealized)).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${realSign}${formatUnit(finalRealized)})</span>`;
+    
+    document.getElementById('cardSuggestedBase').innerHTML = `$${Math.round(maxDeficit).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${formatUnit(maxDeficit)})</span>`;
     
     let minFreeEl = document.getElementById('cardMinFreeMargin');
+    let minFreePctStr = initCapital > 0 ? (minFreeMargin / initCapital * 100).toFixed(1) + '%' : 'N/A';
+
     if (minFreeMargin < 0) {
-        minFreeEl.innerHTML = `⚠️ -$${Math.abs(Math.round(minFreeMargin)).toLocaleString()}<br><span style='font-size:12px;color:#fff;'>本金已歸零！</span>`;
+        minFreeEl.innerHTML = `⚠️ -$${Math.abs(Math.round(minFreeMargin)).toLocaleString()}<br><span style="font-size:15px; color:#ffb8b8; font-weight:normal;">(佔本金: ${minFreePctStr})</span><br><span style='font-size:12px;color:#fff;'>本金已歸零！</span>`;
         minFreeEl.className = "val neg";
     } else {
-        minFreeEl.innerText = `$${Math.round(minFreeMargin).toLocaleString()}`;
+        minFreeEl.innerHTML = `$${Math.round(minFreeMargin).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(剩餘本金比: ${minFreePctStr})</span>`;
         minFreeEl.className = "val pos";
     }
     
     let eqEl = document.getElementById('cardEquity');
-    eqEl.innerText = `${finalEquity >= 0 ? '+' : '-'}$${Math.abs(Math.round(finalEquity)).toLocaleString()}`;
+    let eqSign = finalEquity >= 0 ? '+' : '-';
+    // 新增：顯示期末的權益本金比
+    let finalEqRatio = initCapital > 0 ? (finalEquity / initCapital * 100).toFixed(1) + '%' : 'N/A';
+    
+    eqEl.innerHTML = `${eqSign}$${Math.abs(Math.round(finalEquity)).toLocaleString()}<br>
+                      <span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${eqSign}${formatUnit(finalEquity)})</span><br>
+                      <span style="font-size:15px; color:#9b59b6; font-weight:normal;">(權益本金比: ${finalEqRatio})</span>`;
     eqEl.className = finalEquity >= 0 ? "val pos" : "val neg";
 
     const tbody = document.getElementById('btTableBody');
@@ -704,12 +727,15 @@ function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTr
         let tr = document.createElement('tr');
         if (isDanger) tr.className = "danger-row"; 
         
+        let eqRatioStr = initCapital > 0 ? r.equityRatio.toFixed(2) + '%' : 'N/A';
+
         tr.innerHTML = `
             <td style="text-align:center; border: 1px solid #444; padding: 10px;">${r.date}</td>
             <td style="text-align:right; border: 1px solid #444; padding: 10px;">${Math.round(r.close).toLocaleString()}</td>
             <td style="text-align:right; font-weight:bold; color:${r.qty>0 ? '#e67e22' : '#888'}; border: 1px solid #444; padding: 10px;">${r.qty} 口</td>
             <td style="text-align:right; border: 1px solid #444; padding: 10px;" class="${r.floatPnL < 0 ? 'neg' : 'pos'}">${r.floatPnL !== 0 ? Math.round(r.floatPnL).toLocaleString() : '0'}</td>
             <td style="text-align:right; color:#2ecc71; font-weight:bold; border: 1px solid #444; padding: 10px;">$${Math.round(r.equity).toLocaleString()}</td>
+            <td style="text-align:right; color:#9b59b6; font-weight:bold; border: 1px solid #444; padding: 10px;">${eqRatioStr}</td>
             <td style="text-align:right; color:#f1c40f; border: 1px solid #444; padding: 10px;">$${Math.round(r.margin).toLocaleString()}</td>
             <td style="text-align:right; color:${isDanger ? '#ff4757' : '#e67e22'}; font-weight:bold; border: 1px solid #444; padding: 10px;">${isDanger ? '⚠️ ' : ''}$${Math.round(r.freeMargin).toLocaleString()}</td>
             <td style="text-align:center; border: 1px solid #444; padding: 10px;">${isDanger ? '<span class="neg">斷頭</span>' : '<span class="pos">存活</span>'}</td>
@@ -731,7 +757,7 @@ const crosshairPlugin = {
     afterDraw(chart) {
         if (!mousePosition) return;
         try {
-            const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { y, y1, y2 } } = chart;
             const { x, y: mouseY } = mousePosition;
 
             if (x < left || x > right || mouseY < top || mouseY > bottom) return;
@@ -744,6 +770,8 @@ const crosshairPlugin = {
             ctx.stroke(); ctx.setLineDash([]);
 
             ctx.font = 'bold 12px sans-serif'; ctx.textBaseline = 'middle';
+            
+            // 左側資金標籤
             const valY = y.getValueForPixel(mouseY);
             if (valY !== undefined && !isNaN(valY)) {
                 const textY = '$' + Math.round(valY).toLocaleString();
@@ -752,6 +780,31 @@ const crosshairPlugin = {
                 ctx.fillRect(left - textWidth - 14, mouseY - 12, textWidth + 14, 24);
                 ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(textY, left - 7, mouseY);
             }
+            
+            // 右側口數標籤 (藍色, 向上偏移避免重疊)
+            if (y1) {
+                const valY1 = y1.getValueForPixel(mouseY);
+                if (valY1 !== undefined && !isNaN(valY1)) {
+                    const textY1 = Math.round(valY1) + ' 口';
+                    const textWidth1 = ctx.measureText(textY1).width;
+                    ctx.fillStyle = 'rgba(52, 152, 219, 1)';
+                    ctx.fillRect(right, mouseY - 26, textWidth1 + 14, 24);
+                    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(textY1, right + 7, mouseY - 14);
+                }
+            }
+
+            // 右側百分比標籤 (紫色, 向下偏移避免重疊)
+            if (y2) {
+                const valY2 = y2.getValueForPixel(mouseY);
+                if (valY2 !== undefined && !isNaN(valY2)) {
+                    const textY2 = valY2.toFixed(1) + ' %';
+                    const textWidth2 = ctx.measureText(textY2).width;
+                    ctx.fillStyle = 'rgba(155, 89, 182, 1)';
+                    ctx.fillRect(right, mouseY + 2, textWidth2 + 14, 24);
+                    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(textY2, right + 7, mouseY + 14);
+                }
+            }
+            
             ctx.restore();
         } catch (e) {}
     }
@@ -803,7 +856,11 @@ function drawChart(log) {
             datasets: [
                 { label: '帳戶權益 (Equity)', data: log.map(r => r.equity), borderColor: '#2ecc71', borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' },
                 { label: '佔用保證金 (Margin)', data: log.map(r => r.margin), borderColor: '#f1c40f', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 1, fill: true, pointRadius: 0, yAxisID: 'y' },
-                { label: '可用資金 (Free Cash)', data: log.map(r => r.freeMargin), borderColor: '#e67e22', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' }
+                { label: '可用資金 (Free Cash)', data: log.map(r => r.freeMargin), borderColor: '#e67e22', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' },
+                // 雙右軸：權益本金比 (紫色折線)
+                { label: '權益本金比 (%)', data: log.map(r => r.equityRatio), borderColor: '#9b59b6', borderDash: [2, 2], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y2' },
+                // 雙右軸：口數 (藍色柱狀)
+                { type: 'bar', label: '持有口數 (Contracts)', data: log.map(r => r.qty), backgroundColor: 'rgba(52, 152, 219, 0.4)', borderColor: '#3498db', borderWidth: 1, yAxisID: 'y1' }
             ]
         },
         options: {
@@ -811,7 +868,12 @@ function drawChart(log) {
             events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'], 
             scales: {
                 x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { display: false } },
-                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '資金水位 (TWD)', color: '#fff' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+                // 左側 Y 軸 (資金水位)
+                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '資金水位 (TWD)', color: '#fff' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+                // 右側 Y 軸 1 (口數)
+                y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '持有口數 (口)', color: '#3498db' }, ticks: { color: '#3498db', stepSize: 1 }, grid: { drawOnChartArea: false }, min: 0 },
+                // 右側 Y 軸 2 (權益本金比)
+                y2: { type: 'linear', display: true, position: 'right', title: { display: true, text: '權益本金比 (%)', color: '#9b59b6' }, ticks: { color: '#9b59b6' }, grid: { drawOnChartArea: false } }
             },
             plugins: { legend: { labels: { color: '#fff' } }, tooltip: { enabled: true } }
         },
