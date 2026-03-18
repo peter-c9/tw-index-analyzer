@@ -2,9 +2,11 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>微台指逆向佈建分析 - 雙核全功能版 (靜態 ETF 對比 + 動態生存雷達)</title>
+    <title>台指期逆向佈建分析 - 終極戰情室整合版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
     <style>
         body { font-family: "Segoe UI", "Microsoft JhengHei", sans-serif; margin: 0; background: #121212; color: #e0e0e0; padding: 20px; }
         .container { max-width: 1550px; margin: auto; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -28,6 +30,8 @@
         button:hover { background: #2980b9; }
         .btn-calc { background: #27ae60; }
         .btn-calc:hover { background: #2ecc71; }
+        .btn-img { background: #9b59b6; color: #fff; height: 40px; font-size: 14px; }
+        .btn-img:hover { background: #8e44ad; }
         
         .table-wrapper { overflow-x: auto; max-height: 750px; overflow-y: auto; border: 1px solid #444; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -46,13 +50,19 @@
         /* 靜態表專用樣式 */
         .strategy-label { font-size: 11px; color: #aaa; text-align: center; }
         .str-flat { color: #bdc3c7; }
-        .str-inc { color: #e74c3c; font-weight: bold; }
+        .str-inc { color: #e67e22; font-weight: bold; }
+        .str-inc2 { color: #e74c3c; font-weight: bold; }
+        .str-inc3 { color: #c0392b; font-weight: bold; }
         .str-step { color: #f39c12; font-weight: bold; }
         .str-step3 { color: #3498db; font-weight: bold; }
+        
         .row-bg-0 td { background: rgba(255, 255, 255, 0); }
         .row-bg-1 td { background: rgba(52, 152, 219, 0.05); }
         .row-bg-2 td { background: rgba(46, 204, 113, 0.05); }
-        .row-bg-3 td { background: rgba(155, 89, 182, 0.05); border-bottom: 2px solid #444; }
+        .row-bg-3 td { background: rgba(243, 156, 18, 0.05); }
+        .row-bg-4 td { background: rgba(231, 76, 60, 0.05); }
+        .row-bg-5 td { background: rgba(192, 57, 43, 0.05); border-bottom: 2px solid #444; }
+        
         .sim-row td { background: rgba(241, 196, 15, 0.15) !important; border-top: 2px solid #f1c40f; }
         .sim-row-1 td { background: rgba(241, 196, 15, 0.15) !important; }
         .sim-row-2 td { background: rgba(241, 196, 15, 0.15) !important; border-bottom: 2px solid #f1c40f; }
@@ -60,13 +70,12 @@
 
         /* 動態表專用樣式 */
         .danger-row { background-color: rgba(231, 76, 60, 0.2) !important; color: #ff7675; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px; }
         .card { background: #252525; padding: 15px; border-radius: 8px; border-left: 5px solid #5dade2; text-align: center; display: flex; flex-direction: column; justify-content: center; }
         .card h4 { margin: 0 0 10px 0; color: #aaa; font-size: 13px; }
         .card .val { font-size: 22px; font-weight: bold; color: #fff; line-height: 1.4; }
-        .chart-container { background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; height: 500px; resize: vertical; overflow: hidden; border: 1px solid #444; }
+        .chart-container { background: #252525; padding: 20px; border-radius: 8px; margin-bottom: 20px; height: 400px; border: 1px solid #444; }
 
-        /* Modal 樣式 */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #1e1e1e; padding: 25px; border-radius: 10px; width: 95%; max-width: 1300px; max-height: 85vh; overflow-y: auto; border: 1px solid #555; box-shadow: 0 5px 30px rgba(0,0,0,0.8); position: relative; }
         .modal-close { position: absolute; top: 15px; right: 20px; background: #ff6b6b; padding: 6px 15px; border-radius: 5px; color: white; border: none; font-weight: bold; cursor: pointer; }
@@ -76,56 +85,54 @@
         .modal-table th { background: #34495e; color: #fff; text-align: center; position: sticky; top: 0; font-size: 13px; }
         .btn-detail { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: 0.2s; }
         .btn-detail:hover { background: #2ecc71; transform: scale(1.05); }
-        .btn-disabled { background: #555; color: #888; cursor: not-allowed; }
-        .cash-box { display: inline-block; padding: 8px 12px; border-radius: 5px; margin-right: 10px; font-size: 14px; margin-top: 5px; }
-        .cash-futures { background: rgba(243, 156, 18, 0.15); border: 1px solid #f39c12; }
-        .cash-etf1 { background: rgba(52, 152, 219, 0.15); border: 1px solid #3498db; }
-        .cash-etf2 { background: rgba(155, 89, 182, 0.15); border: 1px solid #9b59b6; }
     </style>
 </head>
 <body onload="handleCalculate()">
 
-<div class="container">
-    <h2>微台指逆向佈建 - 雙核全功能版 (靜態分析 + 動態生存雷達)</h2>
+<div class="container" id="mainContainer">
+    <h2>台指期逆向佈建分析 - 終極戰情室</h2>
     
     <div class="config-panel" style="background: #1a252f; border: 1px solid #34495e;">
         <div class="input-item">
             <label style="color: #f1c40f;">📁 外部檔案 (共用)</label>
             <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" onchange="parseFile(event)">
         </div>
+        
+        <div class="input-item">
+            <label style="color: #3498db; font-weight:bold;">📜 合約規格</label>
+            <select id="contractSize" onchange="handleContractChange()" style="font-weight:bold; color:#3498db; background:#121212;">
+                <option value="10">微型台指 (1點 = 10元)</option>
+                <option value="50">小型台指 (1點 = 50元)</option>
+                <option value="200">大型台指 (1點 = 200元)</option>
+            </select>
+        </div>
+
         <div class="input-item">
             <label style="color: #2ecc71;">💰 預計投入本金 (萬元)</label>
-            <input type="number" id="initCapital" value="50" style="width: 100px; font-weight:bold; color:#2ecc71;" title="供動態生存雷達使用">
+            <input type="number" id="initCapital" value="50" style="width: 100px; font-weight:bold; color:#2ecc71;" onchange="handleContractChange()">
         </div>
         <div class="input-item">
             <label>固定進場比例(%)</label>
-            <input type="number" id="stepPct" value="3" step="0.1" style="width: 100px;">
+            <input type="number" id="stepPct" value="3" step="0.1" style="width: 100px;" onchange="handleContractChange()">
         </div>
         <div class="input-item">
             <label>預估保證金比率(%)</label>
-            <input type="number" id="marginRatio" value="8" style="width: 120px;">
+            <input type="number" id="marginRatio" value="8" style="width: 120px;" onchange="handleContractChange()">
         </div>
         <div id="fileStatus" style="color: #aaa; font-size: 13px; margin-left: 10px; align-self: center;">尚未載入外部檔案，預設套用內建 25 年資料。</div>
     </div>
 
-    <div class="tabs">
+    <div class="tabs" id="tabsRow">
         <button class="tab-btn active" onclick="switchTab(1)">📊 波段極限分析 (靜態 ETF 對比)</button>
-        <button class="tab-btn" onclick="switchTab(2)">📈 歷史連續回測 (動態生存雷達)</button>
+        <button class="tab-btn" onclick="switchTab(2)">📈 雙核整合分析 (動態走勢 + 滾動壓力)</button>
     </div>
 
     <div id="tab1" class="tab-content active">
         <div class="config-panel">
-            <div class="input-item">
-                <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬最高點</label>
-                <input type="number" id="simPeak" class="sim-input" placeholder="例: 26000" style="width: 100px;">
-            </div>
-            <div class="input-item">
-                <label style="color:#f1c40f; font-weight:bold;">⭐ 模擬回檔(%)</label>
-                <input type="number" id="simDropPct" class="sim-input" placeholder="例: 35" style="width: 100px;">
-            </div>
+            <div class="input-item"><label style="color:#f1c40f; font-weight:bold;">⭐ 模擬最高點</label><input type="number" id="simPeak" class="sim-input" placeholder="例: 26000" style="width: 100px;"></div>
+            <div class="input-item"><label style="color:#f1c40f; font-weight:bold;">⭐ 模擬回檔(%)</label><input type="number" id="simDropPct" class="sim-input" placeholder="例: 35" style="width: 100px;"></div>
             <button class="btn-calc" onclick="handleCalculate()">重新計算 / 更新數據</button>
         </div>
-        
         <div id="status" style="margin-bottom:10px; color: #aaa; font-size: 14px;">不選檔案可直接點擊「計算」套用內建的25年波段回檔精華；或上傳自己的資料檔。</div>
 
         <div class="table-wrapper">
@@ -143,7 +150,7 @@
                         <th class="sortable" onclick="sortData('loss')">最大浮虧 <span class="sort-icon"></span></th>
                         <th class="sortable" onclick="sortData('bounce')" title="從最低點需要往上漲幾%才能讓帳戶損益兩平">打平需反彈(%) <span class="sort-icon"></span></th>
                         <th class="sortable" onclick="sortData('safety')">總安全準備金 <span class="sort-icon"></span></th>
-                        <th class="sortable" onclick="sortData('profit')" title="大盤漲回原先最高點(起跌點)時的總獲利">回升高點獲利 <span class="sort-icon"></span></th>
+                        <th class="sortable" onclick="sortData('profit')">回升高點獲利 <span class="sort-icon"></span></th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -153,78 +160,91 @@
     </div>
 
     <div id="tab2" class="tab-content">
-        <div class="config-panel" style="border-left: 4px solid #e67e22;">
-            <div class="input-item"><label>開始年月</label><input type="date" id="btStartDate" value="2000-01-01"></div>
-            <div class="input-item"><label>結束年月</label><input type="date" id="btEndDate"></div>
-            <div class="input-item">
-                <label>動態入單規則</label>
-                <select id="btMode">
-                    <option value="flat">等量 (1, 1, 1...)</option>
-                    <option value="inc">遞增 (1, 2, 3...)</option>
-                    <option value="step2">雙階梯 (1, 1, 2, 2...)</option>
-                    <option value="step3">三階梯 (1, 1, 1, 2, 2, 2...)</option>
-                </select>
-            </div>
-            <div style="width: 2px; background: #444; margin: 0 5px; height: 40px;"></div>
-            <div class="input-item">
-                <label style="color: #5dade2;">停利機制設定</label>
-                <div class="toggle-group">
-                    <input type="checkbox" id="autoTP" checked onchange="toggleTPOptions()" style="width: 20px; height: 20px; cursor: pointer;"> 
-                    <span id="tpLabel">啟用自動停利</span>
-                    <span id="tpOptionsBox" style="margin-left: 10px;">
-                        突破起跌點 <input type="number" id="tpPct" value="0" step="0.5" style="width: 60px; padding: 5px;"> % 後平倉
-                    </span>
+        <div id="chartsArea">
+            <div class="config-panel" style="border-left: 4px solid #e67e22; justify-content: space-between; background: #252525; margin-bottom: 20px;">
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
+                    <div class="input-item"><label>開始年月</label><input type="date" id="btStartDate" value="2000-01-01"></div>
+                    <div class="input-item"><label>結束年月</label><input type="date" id="btEndDate"></div>
+                    <div class="input-item">
+                        <label>動態入單規則</label>
+                        <select id="btMode" style="color:#e67e22; font-weight:bold;">
+                            <option value="flat">等量 (1, 1, 1...)</option>
+                            <option value="step2">雙階梯 (1, 1, 2, 2...)</option>
+                            <option value="step3">三階梯 (1, 1, 1, 2, 2, 2...)</option>
+                            <option value="inc">+1 遞增 (1, 2, 3...)</option>
+                            <option value="inc2">+2 遞增 (1, 3, 5, 7...)</option>
+                            <option value="inc3">+3 遞增 (1, 4, 7, 10...)</option>
+                        </select>
+                    </div>
+                    <div style="width: 2px; background: #444; margin: 0 5px; height: 40px;"></div>
+                    <div class="input-item">
+                        <label style="color: #5dade2;">停利機制設定</label>
+                        <div class="toggle-group">
+                            <input type="checkbox" id="autoTP" checked onchange="toggleTPOptions()" style="width: 20px; height: 20px; cursor: pointer;"> 
+                            <span id="tpLabel">啟用自動停利</span>
+                            <span id="tpOptionsBox" style="margin-left: 10px;">突破起跌點 <input type="number" id="tpPct" value="0" step="0.5" style="width: 60px; padding: 5px;"> % 後平倉</span>
+                        </div>
+                    </div>
+                    <button class="btn-calc" style="background:#e67e22; height:40px;" onclick="runCombinedAnalysis()">▶ 啟動雙核完整運算</button>
                 </div>
+                <button id="btnExport" class="btn-img" onclick="exportImage()">📸 儲存戰情截圖 (PNG)</button>
             </div>
-            <button class="btn-calc" style="background:#e67e22;" onclick="runContinuousBacktest()">▶ 開始連續存活回測</button>
+
+            <div class="summary-grid">
+                <div class="card" style="border-color: #3498db;"><h4>累計已實現獲利</h4><div class="val pos" id="cardRealized">$0</div></div>
+                <div class="card" style="border-color: #2ecc71;"><h4>期末總資產淨值</h4><div class="val pos" id="cardEquity">$0</div></div>
+                <div class="card" style="border-color: #f1c40f;"><h4>期末/過程最大 持有口數</h4><div class="val" id="cardContracts" style="color:#fff;">0 口</div><div style="font-size:12px; color:#aaa; margin-top:5px;" id="cardMaxContracts">過程最大: 0 口</div></div>
+                <div class="card" style="border-color: #9b59b6;"><h4>成功停利趟數</h4><div class="val" id="cardTrades">0 趟</div></div>
+                
+                <div class="card" style="border-color: #e74c3c; background: rgba(231, 76, 60, 0.05);">
+                    <h4 style="color:#e74c3c;">運氣最差 (需最多本金日)</h4>
+                    <div class="val" id="rollMaxCap">$0</div>
+                    <div style="font-size:14px; color:#aaa; margin-top:8px; font-weight:bold;" id="rollMaxDate">進場日: -</div>
+                </div>
+                
+                <div class="card" style="border-color: #f39c12; background: rgba(243, 156, 18, 0.05);">
+                    <h4 style="color:#f39c12;">設定日起算所需最大本金</h4>
+                    <div class="val" id="singleReqCap">$0</div>
+                    <div style="font-size:12px; color:#aaa; margin-top:8px;">(單趟歷史走勢最大資金缺口)</div>
+                </div>
+
+                <div class="card" style="border-color: #3498db; background: rgba(52, 152, 219, 0.05);">
+                    <h4 style="color:#5dade2;">每日平均要求本金</h4>
+                    <div class="val" id="rollAvgCap">$0</div>
+                    <div style="font-size:12px; color:#aaa; margin-top:8px;">(平滑極端運氣的基準)</div>
+                </div>
+                
+                <div class="card" style="border-color: #e67e22;"><h4 title="根據您的預設本金與回測結果">單趟最危急可用資金</h4><div class="val" id="cardMinFreeMargin">$0</div></div>
+            </div>
+
+            <div class="chart-container" style="margin-bottom: 15px;">
+                <h4 style="color: #ccc; margin-top: 0; text-align: center;">📈 動態資金走勢與持有口數</h4>
+                <canvas id="btChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h4 style="color: #ccc; margin-top: 0; text-align: center;">🔄 歷史滾動：從該日進場的最低本金要求與對應最大口數</h4>
+                <canvas id="rollingChart"></canvas>
+            </div>
+            
         </div>
 
-        <div class="summary-grid">
-            <div class="card" style="border-color: #3498db;">
-                <h4>累計已實現獲利</h4>
-                <div class="val pos" id="cardRealized">$0</div>
-            </div>
-            <div class="card" style="border-color: #e67e22;">
-                <h4 title="根據回測結果，您初始最少要準備多少錢才不會斷頭">建議最低準備本金</h4>
-                <div class="val" id="cardSuggestedBase" style="color: #f1c40f;">$0</div>
-            </div>
-            <div class="card" style="border-color: #e74c3c;">
-                <h4 title="帳戶權益 - 保證金 的最小值。若為負數代表您設定的本金已歸零。">過程最危急可用資金</h4>
-                <div class="val" id="cardMinFreeMargin">$0</div>
-            </div>
-            <div class="card" style="border-color: #2ecc71;">
-                <h4>期末帳戶權益 (總資產淨值)</h4>
-                <div class="val pos" id="cardEquity">$0</div>
-            </div>
-            <div class="card" style="border-color: #9b59b6;">
-                <h4 title="成功觸發自動停利出場的次數">成功停利趟數</h4>
-                <div class="val" id="cardTrades">0 趟</div>
-            </div>
-            <div class="card" style="border-color: #f1c40f;">
-                <h4 title="回測結束時手上的總口數，以及過程中曾達到的最大口數">期末持有總口數</h4>
-                <div class="val" id="cardContracts" style="color:#fff;">0 口</div>
-                <div style="font-size:12px; color:#aaa; margin-top:5px;" id="cardMaxContracts">過程最大: 0 口</div>
-            </div>
-        </div>
-
-        <div class="chart-container"><canvas id="btChart"></canvas></div>
-
-        <div class="table-wrapper">
-            <table id="btTable" style="width:100%; font-size:13px; border-collapse: collapse;">
+        <div class="table-wrapper" id="dataTableWrapper" style="margin-top: 20px;">
+            <table id="combinedTable" style="width:100%; font-size:13px; border-collapse: collapse;">
                 <thead>
                     <tr>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; text-align:center;">結算日期</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">大盤收盤</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">持有口數</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">浮動損益 (A)</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #2ecc71; padding: 12px; border: 1px solid #444;">帳戶權益 (B)</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #9b59b6; padding: 12px; border: 1px solid #444;" title="帳戶總資產淨值 / 投入本金">權益/本金比</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #f1c40f; padding: 12px; border: 1px solid #444;">佔用保證金 (C)</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #e67e22; padding: 12px; border: 1px solid #444;" title="帳戶權益減去保證金">可用資金 (B-C)</th>
-                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444;">存活狀態</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; z-index:10;">結算日期</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; z-index:10;">大盤收盤</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; z-index:10;">持有口數</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; z-index:10;">浮動損益</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #2ecc71; padding: 12px; border: 1px solid #444; z-index:10;">帳戶權益</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #9b59b6; padding: 12px; border: 1px solid #444; z-index:10;">權益/本金比</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #f1c40f; padding: 12px; border: 1px solid #444; z-index:10;">佔用保證金</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #e67e22; padding: 12px; border: 1px solid #444; z-index:10;">單趟可用資金</th>
+                        <th style="position: sticky; top: 0; background: #2c3e50; color: #5dade2; padding: 12px; border: 1px solid #444; z-index:10;">存活狀態</th>
+                        <th style="position: sticky; top: 0; background: #e74c3c; color: #fff; padding: 12px; border: 1px solid #444; z-index:10;" title="如果您是這一天才開始進場，直到最後一天為止，途中會經歷的最大資金缺口">👉 該日進場最低本金要求</th>
                     </tr>
                 </thead>
-                <tbody id="btTableBody"></tbody>
+                <tbody id="combinedTableBody"></tbody>
             </table>
         </div>
     </div>
@@ -279,15 +299,85 @@ let currentSortCol = 'dropPct';
 let isAscending = false; 
 
 let chartInstance = null;
+let rollingChartInstance = null;
 let mousePosition = null;
 
-// ================= 大單位轉換器 =================
+// ================= 大單位轉換 & 截圖匯出 =================
 function formatUnit(val) {
     let absVal = Math.abs(val);
-    if (absVal >= 1000000000000) return (absVal / 1000000000000).toFixed(1) + " 兆";
-    if (absVal >= 100000000) return (absVal / 100000000).toFixed(1) + " 億";
-    if (absVal >= 10000) return (absVal / 10000).toFixed(1) + " 萬";
+    if (absVal >= 1000000000000) return (absVal / 1000000000000).toFixed(2) + " 兆";
+    if (absVal >= 100000000) return (absVal / 100000000).toFixed(2) + " 億";
+    if (absVal >= 10000) return (absVal / 10000).toFixed(2) + " 萬";
     return Math.round(absVal).toLocaleString();
+}
+
+function exportImage() {
+    const containerElement = document.getElementById('mainContainer');
+    const tabsRow = document.getElementById('tabsRow');
+    const tableWrapper = document.getElementById('dataTableWrapper');
+    const btnExport = document.getElementById('btnExport');
+    
+    if (!containerElement) return;
+
+    // 產生動態檔名
+    const start = document.getElementById('btStartDate').value || 'All';
+    const end = document.getElementById('btEndDate').value || 'All';
+    const modeText = document.getElementById('btMode').options[document.getElementById('btMode').selectedIndex].text.split(' ')[0];
+    const step = document.getElementById('stepPct').value;
+    const sizeText = document.getElementById('contractSize').options[document.getElementById('contractSize').selectedIndex].text.split(' ')[0];
+    
+    // 取得停利資訊
+    const isAutoTP = document.getElementById('autoTP').checked;
+    const tpPctValue = document.getElementById('tpPct').value;
+    const tpInfo = isAutoTP ? `${tpPctValue}%停利` : `不停利`;
+
+    // 組合新檔名
+    const filename = `${sizeText}_${start}_至_${end}_${modeText}_${step}%_${tpInfo}.png`;
+
+    const originalText = btnExport.innerText;
+    btnExport.innerText = "⏳ 圖片產生中...";
+    btnExport.disabled = true;
+
+    // 儲存原始顯示狀態
+    const origTabsDisplay = tabsRow.style.display;
+    const origTableDisplay = tableWrapper.style.display;
+    const origBtnDisplay = btnExport.style.display;
+
+    // 截圖前：隱藏不想入鏡的部分 (頁籤、表格、匯出按鈕本身)
+    tabsRow.style.display = 'none';
+    tableWrapper.style.display = 'none';
+    btnExport.style.display = 'none';
+
+    // 確保畫面在頂端避免截圖出現空白
+    window.scrollTo(0, 0);
+
+    // 針對包含設定參數與圖表的總容器進行截圖
+    html2canvas(containerElement, { 
+        scale: 2, // 提高畫質
+        backgroundColor: '#121212', // 系統主底色
+        useCORS: true 
+    }).then(canvas => {
+        // 恢復顯示狀態
+        tabsRow.style.display = origTabsDisplay;
+        tableWrapper.style.display = origTableDisplay;
+        btnExport.style.display = origBtnDisplay;
+
+        let link = document.createElement('a');
+        link.download = filename;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        
+        btnExport.innerText = originalText;
+        btnExport.disabled = false;
+    }).catch(err => {
+        tabsRow.style.display = origTabsDisplay;
+        tableWrapper.style.display = origTableDisplay;
+        btnExport.style.display = origBtnDisplay;
+        
+        alert("匯出圖片時發生錯誤！");
+        btnExport.innerText = originalText;
+        btnExport.disabled = false;
+    });
 }
 
 // ================= UI 互動邏輯 =================
@@ -308,6 +398,14 @@ function formatDate(val) {
     if (val instanceof Date) return val.toISOString().split('T')[0];
     if (typeof val === 'number' && val > 30000) return new Date((val - 25569) * 86400 * 1000).toISOString().split('T')[0];
     return val.toString().replace(/\//g, '-').split(' ')[0];
+}
+
+function handleContractChange() {
+    if (document.getElementById('tab1').classList.contains('active')) {
+        handleCalculate();
+    } else if (document.getElementById('tab2').classList.contains('active')) {
+        if (globalRawData.length > 0) runCombinedAnalysis();
+    }
 }
 
 // ================= 檔案讀取 (共用) =================
@@ -345,14 +443,13 @@ function parseFile(event) {
     reader.readAsArrayBuffer(file);
 }
 
-// ================= Tab 1: 靜態分析與 ETF 對比 =================
+// ================= Tab 1: 靜態分析 =================
 function handleCalculate() {
     document.getElementById('status').innerText = "系統正在計算並套用策略，請稍候...";
-    if (globalRawData.length > 0) {
-        extractAndRunAnalysis(globalRawData);
-    } else {
+    if (globalRawData.length > 0) extractAndRunAnalysis(globalRawData);
+    else {
         runAnalysisWithList(top30Drawdowns);
-        document.getElementById('status').innerText = `已成功套用內建的25年精華波段資料。`;
+        document.getElementById('status').innerText = `已成功套用內建的25年波段回檔精華。`;
     }
 }
 
@@ -380,7 +477,7 @@ function extractAndRunAnalysis(data) {
 function runAnalysisWithList(ddList) {
     const stepPct = parseFloat(document.getElementById('stepPct').value) / 100;
     const marginRatio = parseFloat(document.getElementById('marginRatio').value) / 100;
-    const ptVal = 10; 
+    const ptVal = parseInt(document.getElementById('contractSize').value); 
 
     globalData = ddList.map((dd, i) => {
         const margin = Math.ceil((dd.peak * ptVal * marginRatio) / 1000) * 1000;
@@ -390,6 +487,8 @@ function runAnalysisWithList(ddList) {
             dropPct: dd.dropPct, estMargin: margin,
             resFlat: simulateStatic(dd.peak, simulatedPrices, stepPct, 'flat', ptVal, margin),
             resInc: simulateStatic(dd.peak, simulatedPrices, stepPct, 'incremental', ptVal, margin),
+            resInc2: simulateStatic(dd.peak, simulatedPrices, stepPct, 'inc2', ptVal, margin),
+            resInc3: simulateStatic(dd.peak, simulatedPrices, stepPct, 'inc3', ptVal, margin),
             resStep: simulateStatic(dd.peak, simulatedPrices, stepPct, 'stepped', ptVal, margin),
             resStep3: simulateStatic(dd.peak, simulatedPrices, stepPct, 'stepped3', ptVal, margin)
         };
@@ -406,6 +505,8 @@ function runAnalysisWithList(ddList) {
             dropPct: simDropPctVal, estMargin: margin,
             resFlat: simulateStatic(simPeakVal, prices, stepPct, 'flat', ptVal, margin),
             resInc: simulateStatic(simPeakVal, prices, stepPct, 'incremental', ptVal, margin),
+            resInc2: simulateStatic(simPeakVal, prices, stepPct, 'inc2', ptVal, margin),
+            resInc3: simulateStatic(simPeakVal, prices, stepPct, 'inc3', ptVal, margin),
             resStep: simulateStatic(simPeakVal, prices, stepPct, 'stepped', ptVal, margin),
             resStep3: simulateStatic(simPeakVal, prices, stepPct, 'stepped3', ptVal, margin)
         });
@@ -422,7 +523,12 @@ function simulateStatic(peak, prices, stepPct, mode, ptVal, marginPerContract) {
         
         while (p <= target) {
             currentLevel++; 
-            let qty = mode === 'incremental' ? currentLevel : mode === 'stepped' ? Math.ceil(currentLevel / 2) : mode === 'stepped3' ? Math.ceil(currentLevel / 3) : 1;
+            let qty = 1;
+            if (mode === 'incremental') qty = currentLevel;
+            else if (mode === 'inc2') qty = 1 + (currentLevel - 1) * 2;
+            else if (mode === 'inc3') qty = 1 + (currentLevel - 1) * 3;
+            else if (mode === 'stepped') qty = Math.ceil(currentLevel / 2);
+            else if (mode === 'stepped3') qty = Math.ceil(currentLevel / 3);
             
             let this0050 = target * qty * ptVal; 
             let this00631L = this0050 / 2;
@@ -459,9 +565,20 @@ function simulateStatic(peak, prices, stepPct, mode, ptVal, marginPerContract) {
 
 function showDetails(index, mode) {
     const item = globalData[index];
-    const data = mode === 'flat' ? item.resFlat : mode === 'incremental' ? item.resInc : mode === 'stepped' ? item.resStep : item.resStep3;
-    const sName = mode === 'flat' ? '等量 (1, 1, 1...)' : mode === 'incremental' ? '遞增 (1, 2, 3...)' : mode === 'stepped' ? '雙階梯 (1, 1, 2, 2, 3...)' : '三階梯 (1, 1, 1, 2, 2, 2...)';
+    const data = mode === 'flat' ? item.resFlat : 
+                 mode === 'incremental' ? item.resInc : 
+                 mode === 'inc2' ? item.resInc2 : 
+                 mode === 'inc3' ? item.resInc3 : 
+                 mode === 'stepped' ? item.resStep : item.resStep3;
+                 
+    const sName = mode === 'flat' ? '等量 (1, 1, 1...)' : 
+                  mode === 'incremental' ? '+1 遞增 (1, 2, 3...)' : 
+                  mode === 'inc2' ? '+2 遞增 (1, 3, 5...)' : 
+                  mode === 'inc3' ? '+3 遞增 (1, 4, 7...)' : 
+                  mode === 'stepped' ? '雙階梯 (1, 1, 2, 2, 3...)' : '三階梯 (1, 1, 1, 2, 2, 2...)';
+                  
     const step = parseFloat(document.getElementById('stepPct').value);
+    const ptVal = parseInt(document.getElementById('contractSize').value); 
     
     document.getElementById('modalTitle').innerText = `詳細交易歷程：${item.date}`;
     let html = `<div style="margin-bottom:15px; padding:12px; background:#2c3e50; border-radius:6px; font-size:15px;">
@@ -493,7 +610,7 @@ function showDetails(index, mode) {
                      </tr>`;
         });
         
-        const bottomLoss = Math.round((item.trough - data.avgCost) * data.count * 10);
+        const bottomLoss = Math.round((item.trough - data.avgCost) * data.count * ptVal);
         html += `</tbody></table>
         <div style="margin-top:15px; padding:15px; background:rgba(231,76,60,0.15); border-left:5px solid #e74c3c; border-radius:4px;">
             <h4 style="margin:0 0 10px 0; color:#ff6b6b;">⚠️ 壓力測試與獲利預估</h4>
@@ -560,22 +677,24 @@ function renderTable() {
         [{ name: `固定 ${step}% (等量)`, data: item.resFlat, css: "str-flat", mode: 'flat' },
          { name: `固定 ${step}% (雙階)`, data: item.resStep, css: "str-step", mode: 'stepped' },
          { name: `固定 ${step}% (三階)`, data: item.resStep3, css: "str-step3", mode: 'stepped3' },
-         { name: `固定 ${step}% (遞增)`, data: item.resInc, css: "str-inc", mode: 'incremental' }
+         { name: `固定 ${step}% (+1遞增)`, data: item.resInc, css: "str-inc", mode: 'incremental' },
+         { name: `固定 ${step}% (+2遞增)`, data: item.resInc2, css: "str-inc2", mode: 'inc2' },
+         { name: `固定 ${step}% (+3遞增)`, data: item.resInc3, css: "str-inc3", mode: 'inc3' }
         ].forEach((s, sIdx) => {
             const tr = document.createElement('tr');
             if (item.isSim) {
                 if (sIdx === 0) tr.className = "sim-row";
-                else if (sIdx === 3) tr.className = "sim-row-2";
+                else if (sIdx === 5) tr.className = "sim-row-2";
                 else tr.className = "sim-row-1";
             }
             else tr.className = `row-bg-${sIdx}`;
 
             if (sIdx === 0) {
-                tr.innerHTML = `<td rowspan="4" class="sticky-col">${item.isSim ? "⭐ 模擬" : 'No.'+item.rank}</td>
-                                <td rowspan="4" style="text-align:center">${item.date}</td>
-                                <td rowspan="4">${Math.round(item.peak).toLocaleString()}</td>
-                                <td rowspan="4">${Math.round(item.trough).toLocaleString()}</td>
-                                <td rowspan="4" class="neg">-${dropStr}%</td>`;
+                tr.innerHTML = `<td rowspan="6" class="sticky-col">${item.isSim ? "⭐ 模擬" : 'No.'+item.rank}</td>
+                                <td rowspan="6" style="text-align:center">${item.date}</td>
+                                <td rowspan="6">${Math.round(item.peak).toLocaleString()}</td>
+                                <td rowspan="6">${Math.round(item.trough).toLocaleString()}</td>
+                                <td rowspan="6" class="neg">-${dropStr}%</td>`;
             }
             
             const btn = s.data.count > 0 
@@ -595,8 +714,8 @@ function renderTable() {
     });
 }
 
-// ================= Tab 2: 動態連續生存回測 =================
-function runContinuousBacktest() {
+// ================= Tab 2: 雙核引擎 (單趟 + 滾動) =================
+function runCombinedAnalysis() {
     if (globalRawData.length === 0) { alert("⚠️ 請先上傳歷史 K 線資料！"); return; }
 
     const initCapital = (parseFloat(document.getElementById('initCapital').value) || 0) * 10000;
@@ -605,7 +724,7 @@ function runContinuousBacktest() {
     const mode = document.getElementById('btMode').value;
     const autoTP = document.getElementById('autoTP').checked;
     const tpPct = parseFloat(document.getElementById('tpPct').value);
-    const ptVal = 10; 
+    const ptVal = parseInt(document.getElementById('contractSize').value); 
 
     const startStr = document.getElementById('btStartDate').value;
     const endStr = document.getElementById('btEndDate').value;
@@ -615,78 +734,148 @@ function runContinuousBacktest() {
     const simData = globalRawData.filter(d => { let dt = new Date(d.date); return dt >= startDate && dt <= endDate; });
     if (simData.length === 0) { alert("所選日期區間內沒有資料！"); return; }
 
-    let peak = simData[0].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
-    let minFreeMargin = initCapital, maxDeficit = 0, log = [];
-    
-    let totalTrades = 0, maxContracts = 0;
+    document.getElementById('combinedTableBody').innerHTML = "<tr><td colspan='10' style='text-align:center; padding: 30px; font-weight: bold; color: #f1c40f;'>🚀 正在啟動雙核運算引擎，窮舉並比對歷史每一天... 請稍候</td></tr>";
 
-    for (let i = 0; i < simData.length; i++) {
-        let d = simData[i];
-        let tpTarget = peak * (1 + (tpPct / 100));
+    setTimeout(() => {
+        // --- 核心 1：滾動窮舉 (算出每一天進場的 MaxDeficit 與 MaxContracts) ---
+        let rollCaps = new Float64Array(simData.length);
+        let rollMaxContracts = new Int32Array(simData.length);
+        
+        let globalMaxCap = 0;
+        let worstDate = "-";
+        let sumCap = 0;
 
-        if (contracts > 0) {
-            if (autoTP && d.high >= tpTarget) {
-                let exitPrice = Math.max(tpTarget, d.open);
-                if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
-                realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
-                contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
-                totalTrades++; 
-            } else if (!autoTP && d.high > peak) {
-                peak = d.high; currentLevel = 0; 
+        for (let i = 0; i < simData.length; i++) {
+            let peak = simData[i].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
+            let maxDeficit = 0;
+            let runMaxContracts = 0;
+
+            for (let j = i; j < simData.length; j++) {
+                let d = simData[j];
+                let tpTarget = peak * (1 + (tpPct / 100));
+
+                if (contracts > 0) {
+                    if (autoTP && d.high >= tpTarget) {
+                        let exitPrice = Math.max(tpTarget, d.open);
+                        if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
+                        realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
+                        contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
+                    } else if (!autoTP && d.high > peak) {
+                        peak = d.high; currentLevel = 0; 
+                    }
+                } else if (d.high > peak) peak = d.high;
+
+                let target = peak * (1 - (currentLevel + 1) * stepPct);
+                while (d.low <= target) {
+                    currentLevel++;
+                    let qty = 1;
+                    if (mode === 'inc') qty = currentLevel;
+                    else if (mode === 'inc2') qty = 1 + (currentLevel - 1) * 2;
+                    else if (mode === 'inc3') qty = 1 + (currentLevel - 1) * 3;
+                    else if (mode === 'step2') qty = Math.ceil(currentLevel / 2);
+                    else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
+                    
+                    contracts += qty;
+                    totalCost += (Math.min(target, d.open) * qty);
+                    target = peak * (1 - (currentLevel + 1) * stepPct);
+                }
+                
+                // 紀錄這趟路徑中曾到達的最高口數
+                if (contracts > runMaxContracts) runMaxContracts = contracts;
+
+                let avgCost = contracts > 0 ? (totalCost / contracts) : 0;
+                let floatPnL = contracts > 0 ? (d.low - avgCost) * contracts * ptVal : 0; 
+                let curMargin = contracts * d.close * ptVal * marginRatio;
+                let deficit = curMargin - (realizedProfit + floatPnL);
+                if (deficit > maxDeficit) maxDeficit = deficit;
             }
-        } else if (d.high > peak) peak = d.high;
-
-        let target = peak * (1 - (currentLevel + 1) * stepPct);
-        while (d.low <= target) {
-            currentLevel++;
-            let qty = 1;
-            if (mode === 'inc') qty = currentLevel;
-            else if (mode === 'step2') qty = Math.ceil(currentLevel / 2);
-            else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
+            rollCaps[i] = maxDeficit;
+            rollMaxContracts[i] = runMaxContracts;
             
-            contracts += qty;
-            if (contracts > maxContracts) maxContracts = contracts; 
+            sumCap += maxDeficit;
+            if (maxDeficit > globalMaxCap) { globalMaxCap = maxDeficit; worstDate = simData[i].date; }
+        }
+        let avgCap = sumCap / simData.length;
 
-            totalCost += (Math.min(target, d.open) * qty);
-            target = peak * (1 - (currentLevel + 1) * stepPct);
+        // --- 核心 2：單趟連續走勢 (含 EOW 紀錄整合) ---
+        let peak = simData[0].close, contracts = 0, totalCost = 0, currentLevel = 0, realizedProfit = 0;
+        let minFreeMargin = initCapital, singleRunMaxDeficit = 0, log = [];
+        let totalTrades = 0, maxContracts = 0;
+
+        for (let i = 0; i < simData.length; i++) {
+            let d = simData[i];
+            let tpTarget = peak * (1 + (tpPct / 100));
+
+            if (contracts > 0) {
+                if (autoTP && d.high >= tpTarget) {
+                    let exitPrice = Math.max(tpTarget, d.open);
+                    if (tpPct === 0) exitPrice = Math.max(peak, d.open); 
+                    realizedProfit += (exitPrice * contracts - totalCost) * ptVal;
+                    contracts = 0; totalCost = 0; currentLevel = 0; peak = d.high; 
+                    totalTrades++; 
+                } else if (!autoTP && d.high > peak) {
+                        peak = d.high; currentLevel = 0; 
+                }
+            } else if (d.high > peak) peak = d.high;
+
+            let target = peak * (1 - (currentLevel + 1) * stepPct);
+            while (d.low <= target) {
+                currentLevel++;
+                let qty = 1;
+                if (mode === 'inc') qty = currentLevel;
+                else if (mode === 'inc2') qty = 1 + (currentLevel - 1) * 2;
+                else if (mode === 'inc3') qty = 1 + (currentLevel - 1) * 3;
+                else if (mode === 'step2') qty = Math.ceil(currentLevel / 2);
+                else if (mode === 'step3') qty = Math.ceil(currentLevel / 3);
+                
+                contracts += qty;
+                if (contracts > maxContracts) maxContracts = contracts; 
+                totalCost += (Math.min(target, d.open) * qty);
+                target = peak * (1 - (currentLevel + 1) * stepPct);
+            }
+
+            let avgCost = contracts > 0 ? (totalCost / contracts) : 0;
+            let floatPnL_Low = contracts > 0 ? (d.low - avgCost) * contracts * ptVal : 0; 
+            let curMargin = contracts * d.close * ptVal * marginRatio;
+            
+            let curEquity_Low = initCapital + realizedProfit + floatPnL_Low;
+            let curFreeMargin = curEquity_Low - curMargin; 
+            if (curFreeMargin < minFreeMargin) minFreeMargin = curFreeMargin;
+            
+            let deficit = curMargin - (realizedProfit + floatPnL_Low);
+            if (deficit > singleRunMaxDeficit) singleRunMaxDeficit = deficit;
+
+            // 判斷是否為週末前最後一個交易日 (EOW)
+            let isEOW = (i === simData.length - 1);
+            if (!isEOW) {
+                let nextDay = new Date(simData[i+1].date);
+                if (nextDay.getDay() <= new Date(d.date).getDay() || (nextDay - new Date(d.date)) > 2*86400000) isEOW = true;
+            }
+
+            if (isEOW) {
+                let eowFloatPnL = contracts > 0 ? (d.close - avgCost) * contracts * ptVal : 0;
+                let totalEquity = initCapital + realizedProfit + eowFloatPnL; 
+                let freeMargin = totalEquity - curMargin;
+                let eqRatio = initCapital > 0 ? (totalEquity / initCapital * 100) : 0;
+
+                log.push({
+                    date: d.date, close: d.close, qty: contracts, 
+                    floatPnL: eowFloatPnL, equity: totalEquity, margin: curMargin, freeMargin: freeMargin,
+                    equityRatio: eqRatio, rollingReqCap: rollCaps[i]
+                });
+            }
         }
 
-        let avgCost = contracts > 0 ? (totalCost / contracts) : 0;
-        let floatPnL_Low = contracts > 0 ? (d.low - avgCost) * contracts * ptVal : 0; 
-        let curMargin = contracts * d.close * ptVal * marginRatio;
-        
-        let curEquity_Low = initCapital + realizedProfit + floatPnL_Low;
-        let curFreeMargin = curEquity_Low - curMargin; 
+        updateCombinedUI(log, realizedProfit, minFreeMargin, totalTrades, maxContracts, initCapital, 
+                         globalMaxCap, worstDate, singleRunMaxDeficit, avgCap, simData, rollCaps, rollMaxContracts);
 
-        if (curFreeMargin < minFreeMargin) minFreeMargin = curFreeMargin;
-        
-        let deficit = curMargin - (realizedProfit + floatPnL_Low);
-        if (deficit > maxDeficit) maxDeficit = deficit;
-
-        let isEOW = (i === simData.length - 1);
-        if (!isEOW) {
-            let nextDay = new Date(simData[i+1].date);
-            if (nextDay.getDay() <= new Date(d.date).getDay() || (nextDay - new Date(d.date)) > 2*86400000) isEOW = true;
-        }
-
-        if (isEOW) {
-            let eowFloatPnL = contracts > 0 ? (d.close - avgCost) * contracts * ptVal : 0;
-            let totalEquity = initCapital + realizedProfit + eowFloatPnL; 
-            let freeMargin = totalEquity - curMargin;
-            // 計算權益本金比
-            let eqRatio = initCapital > 0 ? (totalEquity / initCapital * 100) : 0;
-
-            log.push({
-                date: d.date, close: d.close, qty: contracts, 
-                floatPnL: eowFloatPnL, equity: totalEquity, margin: curMargin, freeMargin: freeMargin,
-                equityRatio: eqRatio
-            });
-        }
-    }
-    updateBacktestUI(log, realizedProfit, minFreeMargin, maxDeficit, totalTrades, maxContracts, initCapital);
+    }, 50);
 }
 
-function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTrades, maxContracts, initCapital) {
+function updateCombinedUI(log, finalRealized, minFreeMargin, totalTrades, maxContracts, initCapital,
+                          globalMaxCap, worstDate, singleRunMaxDeficit, avgCap, simData, rollCaps, rollMaxContracts) {
+    
+    // --- 1. 更新卡片 ---
     let finalEquity = log.length > 0 ? log[log.length-1].equity : 0;
     let finalQty = log.length > 0 ? log[log.length-1].qty : 0;
 
@@ -697,13 +886,10 @@ function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTr
     let realSign = finalRealized >= 0 ? '+' : '-';
     document.getElementById('cardRealized').innerHTML = `${realSign}$${Math.abs(Math.round(finalRealized)).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${realSign}${formatUnit(finalRealized)})</span>`;
     
-    document.getElementById('cardSuggestedBase').innerHTML = `$${Math.round(maxDeficit).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${formatUnit(maxDeficit)})</span>`;
-    
     let minFreeEl = document.getElementById('cardMinFreeMargin');
     let minFreePctStr = initCapital > 0 ? (minFreeMargin / initCapital * 100).toFixed(1) + '%' : 'N/A';
-
     if (minFreeMargin < 0) {
-        minFreeEl.innerHTML = `⚠️ -$${Math.abs(Math.round(minFreeMargin)).toLocaleString()}<br><span style="font-size:15px; color:#ffb8b8; font-weight:normal;">(佔本金: ${minFreePctStr})</span><br><span style='font-size:12px;color:#fff;'>本金已歸零！</span>`;
+        minFreeEl.innerHTML = `⚠️ -$${Math.abs(Math.round(minFreeMargin)).toLocaleString()}<br><span style="font-size:15px; color:#ffb8b8; font-weight:normal;">(佔本金: ${minFreePctStr})</span>`;
         minFreeEl.className = "val neg";
     } else {
         minFreeEl.innerHTML = `$${Math.round(minFreeMargin).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(剩餘本金比: ${minFreePctStr})</span>`;
@@ -712,41 +898,54 @@ function updateBacktestUI(log, finalRealized, minFreeMargin, maxDeficit, totalTr
     
     let eqEl = document.getElementById('cardEquity');
     let eqSign = finalEquity >= 0 ? '+' : '-';
-    // 新增：顯示期末的權益本金比
     let finalEqRatio = initCapital > 0 ? (finalEquity / initCapital * 100).toFixed(1) + '%' : 'N/A';
-    
-    eqEl.innerHTML = `${eqSign}$${Math.abs(Math.round(finalEquity)).toLocaleString()}<br>
-                      <span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${eqSign}${formatUnit(finalEquity)})</span><br>
-                      <span style="font-size:15px; color:#9b59b6; font-weight:normal;">(權益本金比: ${finalEqRatio})</span>`;
+    eqEl.innerHTML = `${eqSign}$${Math.abs(Math.round(finalEquity)).toLocaleString()}<br><span style="font-size:15px; color:#ccc; font-weight:normal;">(約 ${eqSign}${formatUnit(finalEquity)})</span><br><span style="font-size:15px; color:#9b59b6; font-weight:normal;">(權益本金比: ${finalEqRatio})</span>`;
     eqEl.className = finalEquity >= 0 ? "val pos" : "val neg";
 
-    const tbody = document.getElementById('btTableBody');
-    tbody.innerHTML = "";
+    document.getElementById('rollMaxCap').innerHTML = `$${Math.round(globalMaxCap).toLocaleString()}<br><span style="font-size:15px;color:#e74c3c;font-weight:normal;">(約 ${formatUnit(globalMaxCap)})</span>`;
+    document.getElementById('rollMaxDate').innerText = `進場日: ${worstDate}`;
+    
+    document.getElementById('singleReqCap').innerHTML = `$${Math.round(singleRunMaxDeficit).toLocaleString()}<br><span style="font-size:15px;color:#f39c12;font-weight:normal;">(約 ${formatUnit(singleRunMaxDeficit)})</span>`;
+    
+    document.getElementById('rollAvgCap').innerHTML = `$${Math.round(avgCap).toLocaleString()}<br><span style="font-size:15px;color:#ccc;font-weight:normal;">(約 ${formatUnit(avgCap)})</span>`;
+
+    // --- 2. 更新合併表格 ---
+    const tbody = document.getElementById('combinedTableBody');
+    let htmlStr = "";
     log.forEach(r => {
         let isDanger = r.freeMargin < 0; 
-        let tr = document.createElement('tr');
-        if (isDanger) tr.className = "danger-row"; 
-        
         let eqRatioStr = initCapital > 0 ? r.equityRatio.toFixed(2) + '%' : 'N/A';
+        let isRollDanger = r.rollingReqCap >= avgCap * 1.5;
 
-        tr.innerHTML = `
-            <td style="text-align:center; border: 1px solid #444; padding: 10px;">${r.date}</td>
-            <td style="text-align:right; border: 1px solid #444; padding: 10px;">${Math.round(r.close).toLocaleString()}</td>
-            <td style="text-align:right; font-weight:bold; color:${r.qty>0 ? '#e67e22' : '#888'}; border: 1px solid #444; padding: 10px;">${r.qty} 口</td>
-            <td style="text-align:right; border: 1px solid #444; padding: 10px;" class="${r.floatPnL < 0 ? 'neg' : 'pos'}">${r.floatPnL !== 0 ? Math.round(r.floatPnL).toLocaleString() : '0'}</td>
-            <td style="text-align:right; color:#2ecc71; font-weight:bold; border: 1px solid #444; padding: 10px;">$${Math.round(r.equity).toLocaleString()}</td>
-            <td style="text-align:right; color:#9b59b6; font-weight:bold; border: 1px solid #444; padding: 10px;">${eqRatioStr}</td>
-            <td style="text-align:right; color:#f1c40f; border: 1px solid #444; padding: 10px;">$${Math.round(r.margin).toLocaleString()}</td>
-            <td style="text-align:right; color:${isDanger ? '#ff4757' : '#e67e22'}; font-weight:bold; border: 1px solid #444; padding: 10px;">${isDanger ? '⚠️ ' : ''}$${Math.round(r.freeMargin).toLocaleString()}</td>
-            <td style="text-align:center; border: 1px solid #444; padding: 10px;">${isDanger ? '<span class="neg">斷頭</span>' : '<span class="pos">存活</span>'}</td>
+        htmlStr += `
+            <tr class="${isDanger ? 'danger-row' : ''}">
+                <td style="text-align:center; border: 1px solid #444; padding: 10px;">${r.date}</td>
+                <td style="text-align:right; border: 1px solid #444; padding: 10px;">${Math.round(r.close).toLocaleString()}</td>
+                <td style="text-align:right; font-weight:bold; color:${r.qty>0 ? '#e67e22' : '#888'}; border: 1px solid #444; padding: 10px;">${r.qty} 口</td>
+                <td style="text-align:right; border: 1px solid #444; padding: 10px;" class="${r.floatPnL < 0 ? 'neg' : 'pos'}">${r.floatPnL !== 0 ? Math.round(r.floatPnL).toLocaleString() : '0'}</td>
+                <td style="text-align:right; color:#2ecc71; font-weight:bold; border: 1px solid #444; padding: 10px;">$${Math.round(r.equity).toLocaleString()}</td>
+                <td style="text-align:right; color:#9b59b6; font-weight:bold; border: 1px solid #444; padding: 10px;">${eqRatioStr}</td>
+                <td style="text-align:right; color:#f1c40f; border: 1px solid #444; padding: 10px;">$${Math.round(r.margin).toLocaleString()}</td>
+                <td style="text-align:right; color:${isDanger ? '#ff4757' : '#e67e22'}; font-weight:bold; border: 1px solid #444; padding: 10px;">${isDanger ? '⚠️ ' : ''}$${Math.round(r.freeMargin).toLocaleString()}</td>
+                <td style="text-align:center; border: 1px solid #444; padding: 10px;">${isDanger ? '<span class="neg">斷頭</span>' : '<span class="pos">存活</span>'}</td>
+                <td style="text-align:right; font-weight:bold; border: 1px solid #444; padding: 10px; background: rgba(231,76,60,0.1);" class="${isRollDanger ? 'neg' : ''}">$${Math.round(r.rollingReqCap).toLocaleString()}</td>
+            </tr>
         `;
-        tbody.appendChild(tr);
     });
+    tbody.innerHTML = htmlStr;
 
-    drawChart(log);
+    // --- 3. 繪製圖表 ---
+    drawBTChart(log);
+    
+    let fullRollData = simData.map((d, idx) => ({ 
+        date: d.date, 
+        reqCap: rollCaps[idx],
+        maxContracts: rollMaxContracts[idx]
+    }));
+    drawRollingChart(fullRollData);
 }
 
-// ================= 圖表外掛區 =================
+// ================= 圖表外掛與繪製 =================
 const crosshairPlugin = {
     id: 'crosshair',
     beforeEvent(chart, args) {
@@ -771,7 +970,7 @@ const crosshairPlugin = {
 
             ctx.font = 'bold 12px sans-serif'; ctx.textBaseline = 'middle';
             
-            // 左側資金標籤
+            // Y 軸左側標籤 (主金錢)
             const valY = y.getValueForPixel(mouseY);
             if (valY !== undefined && !isNaN(valY)) {
                 const textY = '$' + Math.round(valY).toLocaleString();
@@ -781,7 +980,7 @@ const crosshairPlugin = {
                 ctx.fillStyle = '#fff'; ctx.textAlign = 'right'; ctx.fillText(textY, left - 7, mouseY);
             }
             
-            // 右側口數標籤 (藍色, 向上偏移避免重疊)
+            // Y 軸右側標籤 1 (口數，藍色)
             if (y1) {
                 const valY1 = y1.getValueForPixel(mouseY);
                 if (valY1 !== undefined && !isNaN(valY1)) {
@@ -793,7 +992,7 @@ const crosshairPlugin = {
                 }
             }
 
-            // 右側百分比標籤 (紫色, 向下偏移避免重疊)
+            // Y 軸右側標籤 2 (百分比，紫色)
             if (y2) {
                 const valY2 = y2.getValueForPixel(mouseY);
                 if (valY2 !== undefined && !isNaN(valY2)) {
@@ -804,7 +1003,6 @@ const crosshairPlugin = {
                     ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(textY2, right + 7, mouseY + 14);
                 }
             }
-            
             ctx.restore();
         } catch (e) {}
     }
@@ -832,7 +1030,6 @@ const dangerZonePlugin = {
                 if (equityData[i] < marginData[i]) { 
                     const point = meta.data[i];
                     if (!point) continue;
-                    
                     const xCenter = point.x;
                     let halfWidth = 5; 
                     if (i > 0 && meta.data[i-1]) halfWidth = Math.abs(xCenter - meta.data[i-1].x) / 2;
@@ -846,7 +1043,7 @@ const dangerZonePlugin = {
     }
 };
 
-function drawChart(log) {
+function drawBTChart(log) {
     if (chartInstance) chartInstance.destroy();
     const ctx = document.getElementById('btChart').getContext('2d');
     chartInstance = new Chart(ctx, {
@@ -857,9 +1054,7 @@ function drawChart(log) {
                 { label: '帳戶權益 (Equity)', data: log.map(r => r.equity), borderColor: '#2ecc71', borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' },
                 { label: '佔用保證金 (Margin)', data: log.map(r => r.margin), borderColor: '#f1c40f', backgroundColor: 'rgba(241,196,15,0.1)', borderWidth: 1, fill: true, pointRadius: 0, yAxisID: 'y' },
                 { label: '可用資金 (Free Cash)', data: log.map(r => r.freeMargin), borderColor: '#e67e22', borderDash: [5, 5], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y' },
-                // 雙右軸：權益本金比 (紫色折線)
                 { label: '權益本金比 (%)', data: log.map(r => r.equityRatio), borderColor: '#9b59b6', borderDash: [2, 2], borderWidth: 2, pointRadius: 0, fill: false, yAxisID: 'y2' },
-                // 雙右軸：口數 (藍色柱狀)
                 { type: 'bar', label: '持有口數 (Contracts)', data: log.map(r => r.qty), backgroundColor: 'rgba(52, 152, 219, 0.4)', borderColor: '#3498db', borderWidth: 1, yAxisID: 'y1' }
             ]
         },
@@ -868,16 +1063,56 @@ function drawChart(log) {
             events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'], 
             scales: {
                 x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { display: false } },
-                // 左側 Y 軸 (資金水位)
                 y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '資金水位 (TWD)', color: '#fff' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
-                // 右側 Y 軸 1 (口數)
                 y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '持有口數 (口)', color: '#3498db' }, ticks: { color: '#3498db', stepSize: 1 }, grid: { drawOnChartArea: false }, min: 0 },
-                // 右側 Y 軸 2 (權益本金比)
                 y2: { type: 'linear', display: true, position: 'right', title: { display: true, text: '權益本金比 (%)', color: '#9b59b6' }, ticks: { color: '#9b59b6' }, grid: { drawOnChartArea: false } }
             },
             plugins: { legend: { labels: { color: '#fff' } }, tooltip: { enabled: true } }
         },
         plugins: [dangerZonePlugin, crosshairPlugin] 
+    });
+}
+
+function drawRollingChart(data) {
+    if (rollingChartInstance) rollingChartInstance.destroy();
+    const ctx = document.getElementById('rollingChart').getContext('2d');
+    rollingChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(r => r.date),
+            datasets: [
+                { 
+                    label: '該日進場的最低本金要求 (Required Cap)', 
+                    data: data.map(r => r.reqCap), 
+                    borderColor: '#e74c3c', 
+                    backgroundColor: 'rgba(231, 76, 60, 0.2)', 
+                    borderWidth: 1.5, 
+                    pointRadius: 0, 
+                    fill: true,
+                    yAxisID: 'y'
+                },
+                {
+                    type: 'bar',
+                    label: '對應經歷的最大持有口數 (Max Contracts)',
+                    data: data.map(r => r.maxContracts),
+                    backgroundColor: 'rgba(52, 152, 219, 0.4)',
+                    borderColor: '#3498db',
+                    borderWidth: 1,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+            events: ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
+            scales: {
+                x: { ticks: { color: '#aaa', maxTicksLimit: 12 }, grid: { display: false } },
+                y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '所需最低本金 (TWD)', color: '#fff' }, ticks: { color: '#aaa' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+                y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: '最大經歷口數 (口)', color: '#3498db' }, ticks: { color: '#3498db', stepSize: 1 }, grid: { drawOnChartArea: false }, min: 0 }
+            },
+            plugins: { legend: { labels: { color: '#fff' } }, tooltip: { enabled: true } }
+        },
+        plugins: [crosshairPlugin] 
     });
 }
 </script>
